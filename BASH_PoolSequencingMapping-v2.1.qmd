@@ -1,5 +1,5 @@
 ---
-title: "BASH-BSA-mapping"
+title: "BASH_PoolSeqMapping"
 author: "Deng Zhaoguo"
 format: html
 self-contained: true
