@@ -278,9 +278,15 @@ p<- p +
     legend.position = "none",
     plot.title = element_text(hjust = 0.5)
   )
+```
 
+```{r}
 print(p)
+```
 
+### save pdf
+
+```{r}
 file_name <- paste0(target_gene, "-ratio.pdf")
 pdf(file_name, width = 3.25, height = 3.9)
 print(p)
