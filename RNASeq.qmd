@@ -1,0 +1,334 @@
+---
+title: "RNASeq"
+author: "Deng Zhaoguo"
+format: html
+self-contained: true
+date: "`r Sys.Date()`"
+toc: true       # 显示目录
+toc-depth: 5    # 显示三级标题
+execute:
+  eval: false
+  echo: TRUE
+  warning: FALSE
+  message: FALSE
+---
+
+这是复杂版本的DESeq2流程，包含两个因素，且双因素可能有互作（比如两个并不独立的基因）
+
+# load
+
+```{r}
+library("DESeq2")
+library("openxlsx")
+library("dplyr")
+library("pheatmap")
+library("RColorBrewer")
+library("ggplot2")
+library("Mfuzz")
+library("reshape2")
+library('clusterProfiler')
+library('org.At.tair.db')
+library('tidyverse')
+
+
+```
+
+# Build dds
+
+```{r}
+directory="D:/#Data/#Data of collaboration/#宇萌/RNAseq analysis/RNAseq eds1 GLM"
+sampleTable <- read.xlsx("sampleTable.xlsx",sheet=1)
+sampleTable$mutation_a <- relevel(factor(sampleTable$mutation_a), ref = "0")
+sampleTable$mutation_b <- relevel(factor(sampleTable$mutation_b), ref = "0")
+sampleTable$Condition <- relevel(factor(sampleTable$Condition), ref = "Mock")
+sampleTable$group <- factor(sampleTable$group)
+
+# 构建设计模型，包含主效应和交互效应
+ddsHTSeq <- DESeqDataSetFromHTSeqCount(
+  sampleTable = sampleTable,
+  directory = directory,
+  design = ~ mutation_a * mutation_b * Condition
+)
+```
+
+![](images/sample.jpg)
+
+## Filter 低表达基因
+
+```{r}
+# 过滤低表达基因
+smallestGroupSize <- nrow(sampleTable)/2
+keep <- rowSums(counts(ddsHTSeq) >= 5) > smallestGroupSize
+dds <- ddsHTSeq[keep,]
+dim(ddsHTSeq)
+dim(dds)
+```
+
+# DEseq
+
+```{r}
+# 主分析
+dds <- DESeq(dds)
+sizeFactors(dds)
+resultsNames(dds)
+```
+
+## PCA看下聚类情况
+
+```{r}
+vsd <- vst(dds)
+plotPCA(vsd, intgroup=c("group"),ntop=500)
+```
+
+### Sample dist heatmap
+
+```{r}
+sampleDists <- dist(t(assay(vsd)))
+sampleDistMatrix <- as.matrix(sampleDists)
+colnames(sampleDistMatrix) <- NULL
+colors <- colorRampPalette( rev(brewer.pal(9, "Blues")) )(255)
+pheatmap(sampleDistMatrix,
+         clustering_distance_rows=sampleDists,
+         clustering_distance_cols=sampleDists,
+         col=colors)
+
+# rlog dds and plot 30 topVar genes
+rld <- rlog(dds)
+topVarGenes <- head(order(-rowVars(assay(rld))),30)
+mat <- assay(rld)[ topVarGenes, ]
+mat <- mat - rowMeans(mat)
+df <- as.data.frame(colData(rld)[,c("group")])
+pheatmap(mat)
+```
+
+## Save
+
+```{r}
+saveRDS(dds,"dds_full.rds")
+```
+
+# Norm counts and export
+
+```{r}
+# 2. 分组信息与 group 平均表达矩阵准备 ---------------------------------
+dds=readRDS('dds_full.rds')
+norm_counts <- counts(dds, normalized = TRUE)
+sample_info <- as.data.frame(colData(dds))
+write.csv(norm_counts,'expr_normalize.csv',row.names = T)
+
+means <- t(apply(norm_counts, 1, function(x) {
+  tapply(x, sample_info$group, mean)
+}))
+
+log2_means <- log2(means+1)
+```
+
+## save
+
+```{r}
+write.csv(means,'expr_means.csv',row.names = T)
+write.csv(log2_means,'expr_log2means.csv',row.names = T)
+```
+
+# 提取 WT 背景的 AVR vs Mock 差异表达基因
+
+```{r}
+padj_cutoff = 0.05
+fc_cutoff = 1
+
+res_WT <- results(dds, name = "Condition_AVR_vs_Mock")
+
+WT_DEGsup <- as.data.frame(subset(res_WT, padj < padj_cutoff & (log2FoldChange) > fc_cutoff))
+WT_DEGsup_genelist = rownames(WT_DEGsup)
+
+WT_DEGsdown <- as.data.frame(subset(res_WT, padj < padj_cutoff & (log2FoldChange) < -fc_cutoff))
+WT_DEGsdown_genelist = rownames(WT_DEGsdown)
+
+#write.csv(WT_DEGs,'WT_DEGs.csv',row.names = T)
+
+res_cop <- results(dds, name = "mutation_a_1_vs_0")
+cop_DEGs <- as.data.frame(subset(res_cop, padj < padj_cutoff & abs(log2FoldChange) > fc_cutoff))
+cop_DEGs_genelist = rownames(cop_DEGs)
+```
+
+# Interaction
+
+```{r}
+# 4. mutation_a 与 mutation_b 的交互效应 Mock条件 -------------------------------
+res_interaction_AB <- results(dds, name = "mutation_a1.mutation_b1")
+interaction_genes <- as.data.frame(subset(res_interaction_AB,  padj < padj_cutoff & abs(log2FoldChange) > fc_cutoff))
+interaction_genes_genelist <- rownames(interaction_genes)
+
+#write.csv(interaction_genes,'interaction.csv',row.names = T)
+```
+
+# intersect for GOI
+
+```{r}
+ROI_genelist=intersect(WT_DEGsup_genelist,interaction_genes_genelist)
+ROI_genelist=intersect(cop_DEGs_genelist,ROI_genelist)
+```
+
+# GO analysis and plot
+
+```{r}
+my_list <- ROI_genelist
+
+ego <- enrichGO(
+  gene         = my_list,
+  OrgDb        = org.At.tair.db,  
+  keyType      = "TAIR",
+  ont          = "BP", 
+  pAdjustMethod = "BH",
+  pvalueCutoff = 0.05,
+  qvalueCutoff = 0.2
+)
+
+dotplot(ego, 
+        showCategory = 20,
+        font.size=6,
+        title = "Top 20 GO Terms")
+
+
+# 查找 GO term ID 对应的描述
+
+find_term <- c(
+  'response to salicylic acid',
+  'immune system process',
+  'immune response',
+  'innate immune response',
+  'response to molecule of bacterial origin',
+  'regulation of response to biotic stimulus',
+  'cellular response to salicylic acid stimulus',
+  'salicylic acid mediated signaling pathway',
+  'systemic acquired resistance',
+  'positive regulation of defense response',
+  'programmed cell death',
+  'regulation of systemic acquired resistance'
+)
+
+# 存储匹配基因
+immune_gene_list <- list()
+
+for (term in find_term) {
+  idx <- grep(term, ego@result$Description, ignore.case = TRUE)
+  
+  if (length(idx) > 0) {
+    go_id <- ego@result$ID[idx[1]]  # 只取第一个匹配到的 GO term ID
+    cat("✅ Found:", term, "| GO ID:", go_id, "\n")
+    
+    genes <- ego@geneSets[[go_id]]
+    immune_gene_list[[term]] <- data.frame(gene = genes)
+  } else {
+    cat("❌ No matching GO term for:", term, "\n")
+  }
+}
+
+# 合并所有基因并去重
+gene_GO <- bind_rows(immune_gene_list) %>% distinct()
+final_genes <- intersect(ROI_genelist, gene_GO$gene)
+
+```
+
+# MatPlot
+
+```{r}
+mydata<-read.csv("expr_log2means.csv")
+df=mydata[,-1]
+rownames(df)=mydata[,1]
+df_scaled=t(scale(t(df)))
+
+genelist_1 = WT_DEGsup_genelist
+genelist_2 = ROI_genelist
+
+data_plt=df_scaled[genelist_1,]
+
+# 计算全局 y 轴范围
+par(mfrow = c(1, 4), mar = c(3, 3, 2, 1))  # 边距适中
+ylim_range <- range(data_plt, na.rm = TRUE)
+
+
+light_blue <- adjustcolor("blue", alpha.f = 0.5)
+red_thin <- adjustcolor("red", alpha.f = 0.5)
+
+# 开始逐个绘图
+for (i in seq(1, ncol(data_plt), by = 2)) {
+  
+  data_set <- data_plt[, c(i, i+1)]
+  
+  matplot(t(data_set), 
+          type = "l", 
+          col = light_blue, 
+          lty = 1,
+          lwd = 1,
+          xaxt = "n",               # ❌ 取消 x 轴
+          xlab = "", 
+          ylab = "Expression", 
+          main = colnames(data_set)[1],   # 用第一列名作为标题（如 A0_B0_Mock）
+          ylim = ylim_range)
+  
+  # 添加 ROI 基因（红线）
+  matlines(t(data_set[genelist_2, ]), 
+           type = "l", 
+           lty = 1, 
+           lwd = 0.5,
+           col = red_thin)
+  
+  # 添加 x 坐标 label（Mock & AVR）
+  axis(side = 1, at = 1:2, labels = c("Mock", "AVR"), tick = FALSE, line = -0.5, cex.axis = 0.8)
+}
+```
+
+Matplot是看基因总体表达趋势的：
+
+![](images/Snipaste_2025-04-20_15-48-19.jpg)
+
+# Heatmap
+
+Scaled Z score只能比较不同处理下同一基因的改变，不能去看不同基因
+
+```{r}
+mydata<-read.csv("expr_log2means.csv")
+df=mydata[,-1]
+rownames(df)=mydata[,1]
+df_scaled=t(scale(t(df)))
+
+gene.to.plt = read.csv('22 genes for heatmap.csv')
+
+idx = intersect(rownames(df_scaled),ROI_genelist)
+
+df_plot=df_scaled[idx,]
+
+
+p2 <- pheatmap(df_plot,
+               cluster_rows = T,
+               cluster_cols = FALSE,
+               scale = "none", #已经scale过了
+               color = colorRampPalette(c("navy", "white", "firebrick3"))(50),
+               # 在每两列之间加入间隔
+               #gaps_col = c(2, 4, 6),  
+               show_rownames = T,
+               fontsize_col = 5
+)
+
+
+# 计算行聚类和基因顺序
+row_dist <- dist(t(scale(t(log2(expr_matrix + 1)))))
+row_clust <- hclust(row_dist, method = "complete")
+gene_order <- rownames(expr_matrix)[row_clust$order]
+expr_matrix <- expr_matrix[match(gene_order, rownames(expr_matrix)), ]
+```
+
+# Annotation specific gene sets
+
+这里只输出了 annotation，没有 RNASeq信息，所以用的不是 merge 或者 full_join
+
+```{r}
+gene_annotation = read.xlsx("ATH_summary_2022_SAUR_included.xlsx")
+
+ROI_annotation = gene_annotation[gene_annotation$gene %in% ROI_genelist, ]
+write.csv(ROI_annotation,'231genes_annotation.csv',row.names = F)
+
+immune_genes_annotation = gene_annotation[gene_annotation$gene %in% final_genes, ]
+write.csv(immune_genes_annotation,'54genes related to immune in 231genes_annotation.csv',row.names = F)
+```

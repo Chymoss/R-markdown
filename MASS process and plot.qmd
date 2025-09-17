@@ -1,0 +1,172 @@
+---
+title: "MASS to valcano"
+author: "Deng Zhaoguo"
+format: html
+self-contained: true
+date: "`r Sys.Date()`"
+toc: true       # 显示目录
+toc-depth: 5    # 显示三级标题
+execute:
+  eval: false
+  echo: TRUE
+  warning: FALSE
+  message: FALSE
+---
+
+# Memo
+
+Read MASS results, merge and t.test, volcano plot
+
+# Read files and merge, log2 transform
+
+```{r}
+# 定义需要合并的文件
+file_seq <- c(
+  'MS211267-ACT-B10.xlsx',
+  'MS211973-ACT1117.xlsx',
+  'MS221737-TB.xlsx',
+  'MS211267-DN2-B10.xlsx',
+  'MS211973-GTRD1117.xlsx',
+  'MS221737-GTRD.xlsx'
+)
+
+#确认文件 Accession (x1), Unique.peptides (x2), Abundance (x3)所在的列
+x1 <- 4
+x2 <- 11
+x3 <- 18
+
+# 读取并处理文件
+df_list <- lapply(file_seq, function(file) {
+  read.xlsx(file, sheet = 1) %>%
+    select(Accession = x1, Unique.Peptides = x2, Abundance = x3) %>%
+    filter(Unique.Peptides > 2) %>%
+    select(-Unique.Peptides) %>%
+    mutate(Accession = sub("^(Pp\\d+c\\d+_\\d+).*", "\\1", Accession)) %>%
+    rename(!!file := Abundance)
+})
+
+# 合并所有文件并进行log2转化
+df_merge <- reduce(df_list, full_join, by = "Accession") %>%
+  replace(is.na(.), 0)
+
+combine <- df_merge %>%
+  mutate(across(-Accession, ~ log2(. + 1)))
+
+# 导出结果
+write.xlsx(combine, "raw_combine.xlsx")
+```
+
+# T test
+
+```{r}
+# 读取数据并设置行名
+combine <- read.xlsx("raw_combine.xlsx")
+
+# 提取数值部分并设置行名
+df_transform <- combine %>%
+  column_to_rownames(var = colnames(combine)[1])  # 将第一列设置为行名
+
+
+#Add foldchange and pval
+sample <- 4:6
+control <- 1:3
+
+foldchange <- apply(df_transform, 1, function(x) mean(x[sample]) - mean(x[control]))
+pval <- apply(df_transform, 1, function(x) t.test(x[sample], x[control], var.equal = TRUE)$p.value)
+
+compare <- cbind(df_transform, foldchange, pval)
+compare$qval <- p.adjust(compare$pval, method = "fdr")
+
+# 输出结果
+write.xlsx(compare, "raw_t_test.xlsx", rowNames = TRUE)
+```
+
+\# Volcano plot
+
+```{r}
+data_import <- read.xlsx("raw_t_test.xlsx", sheet = 1)
+
+data_import <- data_import %>%
+  column_to_rownames(var = colnames(data_import)[1])
+
+
+# 过滤数据
+n_repeat <- 1
+log2fc_cutoff <- 3
+sig_cutoff <- 0.05
+
+data_plt <- data_import[rowSums(data_import[, 4:6] > 1) >= n_repeat, ] %>%
+  mutate(gene_type = case_when(
+    foldchange > log2fc_cutoff & pval < sig_cutoff ~ "up",
+    TRUE ~ "ns"
+  ))
+
+# 设置火山图参数
+plot_params <- list(
+  cols = c("up" = "firebrick", "down" = "#26b3ff", "ns" = "grey"),
+  sizes = c("up" = 3, "down" = 3, "ns" = 2),
+  alphas = c("up" = 1, "down" = 1, "ns" = 0.5)
+)
+
+# 绘制火山图
+p1 <- ggplot(data_plt, aes(x = foldchange, y = -log10(pval), fill = gene_type, size = gene_type, alpha = gene_type)) +
+  theme_bw() +
+  theme(panel.grid = element_blank()) +
+  geom_point(shape = 21) +  # 设置点的形状
+  geom_hline(yintercept = -log10(sig_cutoff), linetype = "dashed") +
+  geom_vline(xintercept = c(-log2fc_cutoff, log2fc_cutoff), linetype = "dashed") +  # 添加对称的竖线
+  scale_fill_manual(values = plot_params$cols) +
+  scale_size_manual(values = plot_params$sizes) +
+  scale_alpha_manual(values = plot_params$alphas)
+```
+
+## highlight *Gene Of Interest*
+
+```{r}
+# 加载感兴趣基因列表
+genelist_of_interest <- read.xlsx("GOI.xlsx")
+
+# 提取基因和注释信息
+gene_name <- genelist_of_interest$gene
+symbol <- genelist_of_interest$annotation
+
+# 筛选需要标注的基因数据
+datapoints <- data_plt %>%
+  rownames_to_column(var = "gene") %>%  # 确保基因名为列
+  filter(gene %in% gene_name) %>%
+  mutate(annotation = symbol[match(gene, gene_name)])  # 添加对应注释信息
+
+# 绘制火山图并标注感兴趣基因
+p2 <- p1 +
+  geom_text_repel(
+    data = datapoints,
+    aes(x = foldchange, y = -log10(pval), label = annotation),
+    size = 3,               # 标签字体大小
+    color = "black",        # 标签字体颜色
+    box.padding = 0.5,      # 标签与点之间的最小距离
+    point.padding = 0.3,    # 点与标签之间的额外间距
+    segment.color = "grey", # 指向线的颜色
+    segment.size = 0.5,     # 指向线的粗细
+    alpha = 0.8             # 标签透明度
+  )
+
+pdf("volcano.pdf")
+plot(p2)
+dev.off()
+```
+
+# output files
+
+```{r}
+#output 
+# 将行名转为第一列
+data_output <- data_plt %>%
+  rownames_to_column(var = "gene")  # 将行名转为名为"gene"的列
+
+# 读取参考文件
+ref <- read.xlsx('PP_v6.1_synonym_anno.xlsx')
+
+# 合并数据框,导出结果为 Excel 文件
+result <- merge(data_output,ref, by = 'gene')  # 按"gene"列合并
+write.xlsx(result, "Result_summary.xlsx", rowNames = FALSE)
+```

@@ -1,0 +1,546 @@
+---
+title: "DataPlots (mainly ggplot2)"
+format: html
+self-contained: true
+author: "Deng Zhaoguo"
+date: "`r Sys.Date()`"
+toc: true       # 显示目录
+toc-depth: 5    # 显示5级标题
+collapse: false # 不折叠标题
+execute:
+  eval: false
+  echo: TRUE
+  warning: FALSE
+  message: FALSE
+---
+
+# 加载包
+
+```{r}
+library(gg.gap) 
+library(openxlsx)
+library(reshape2)
+library(forcats)
+library(dplyr)
+library(ggplot2)
+library(tidyverse)
+```
+
+# 读取处理数据
+
+```{r}
+#read data
+df = read.xlsx('datasheet.xlsx')
+
+#process data
+df$group=as.factor(df$group)
+df$group <- fct_inorder(df$group)
+
+
+#set x-axis to factor
+df$time=as.factor(df$time)
+```
+
+# 画图调整选项
+
+```{r}
+#most popular
+theme_classic()
+
+# 3 in 1 combine
+theme_bw()
+theme(panel.grid = element_blank())
+theme(legend.position = "none")
+
+#Adjustment: segment y axis
+gg.gap(
+  plot = p1,
+  segments = c(2.5e6, 2.5e7),
+  ylim = c(0, 2.25e8),
+  tick_width = c(1e6, 2.5e7),
+  rel_heights = c(0.2, 0, 0.4)
+)
+
+
+##Adjustment: axis and other
+coord_cartesian(ylim = c(0, 100))
+scale_x_continuous(breaks = c(0, 2, 4, 6, 9, 12, 24))
+scale_color_manual(values = c("red", 'black'))   #折线图等线图
+scale_fill_manual(values = c("red", 'black'))  #柱状图等填充图
+
+#加上图标标题，图例，加上p value
+p<- p + 
+  labs(title = target_gene, y = "ratio") +
+  annotate("text", x = 1.5, y = max(df$value) * 1.4,
+           label = p_label, size = 5) +
+  theme_classic() +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5)
+  )
+
+```
+
+![](images/hextable.png)
+
+# line plot grouped
+
+**所有 grouped 都是类似 x-y-t 的多维度数据，比如 “基因型-表型-时间” ，如果只是 “基因型-表型” 这种简单图，去掉 dodge选项，也不需要 fill = group / color = group**
+
+```{r}
+#plot
+bar_width = 0.35
+jitter_width = 0.05
+dodge_width = 0.5
+
+p2 <-
+  ggplot(df, aes(x = time, y = value, color = group, fill = group)) +
+
+  stat_summary(
+    fun = mean,
+    geom = "line",
+    position = position_dodge(width = dodge_width),
+    alpha = 1,
+    linewidth= 0.3
+  ) +
+  
+  stat_summary(
+    fun = mean,
+    geom = "crossbar",
+    fun.max = function(x) mean(x) + sd(x) ,
+    fun.min = function(x) mean(x) - sd(x) ,
+    position = position_dodge(width = dodge_width),
+    width = bar_width,
+    alpha = 1,
+    linewidth= 0.3
+  ) +
+ 
+  geom_point(
+    size =1,
+    shape = 16,
+    alpha = 1,
+    position = position_jitterdodge(jitter.width = jitter_width, dodge.width = dodge_width)
+  )
+
+p2
+
+p2 + 
+  theme_classic() +
+  scale_fill_manual(values=c('#F8766D','#00BD57','yellow','purple','magenta'))+
+  scale_color_manual(values=rep('black',5))+
+  scale_x_continuous(breaks=c(0,3,6,9,12))+
+  scale_y_continuous(breaks=c(0,30,60,90,120))
+```
+
+## 也可以用 fun.data来找平均数和 sd
+
+```{r}
+p2 <-
+  ggplot(df, aes(x = time, y = value, color = group, fill = group)) +
+ 
+  stat_summary(
+    fun = mean,
+    geom = "line",
+    position = position_dodge(width = dodge_width),
+    alpha = 1,
+    linewidth= 0.7,
+    show.legend = T
+  ) +
+
+  
+  stat_summary(
+    fun.data = mean_sdl,
+    fun.args = list(mult = 1),
+    geom = "crossbar",
+    linewidth= 0.2,
+    position = position_dodge(width = dodge_width),
+    width = bar_width,
+    alpha = 1,
+    show.legend = T
+  ) +
+  
+  geom_point(
+    size =1,
+    shape = 16,
+    alpha = 1,
+    position = position_jitterdodge(jitter.width = jitter_width, dodge.width = dodge_width)
+  )
+
+p2
+```
+
+![](images/5K.jpg)
+
+# Barplot grouped
+
+```{r}
+
+#set width
+bar_width = 0.35
+jitter_width = 0.05
+dodge_width = 0.5
+
+p1 <-
+  ggplot(df, aes(x = time, y = value,  fill = group)) +
+  
+  stat_summary(
+    fun = mean,
+    geom = "bar",
+    alpha = 0.5,
+    width = bar_width,
+    position = position_dodge(width = dodge_width),
+  ) +
+  
+  stat_summary(
+    fun = mean,
+    geom = "errorbar",
+    fun.max = function(x) mean(x) + sd(x) ,
+    fun.min = function(x) mean(x) - sd(x) ,
+    position = position_dodge(width = dodge_width),
+    width = bar_width/2,
+  )
+  
+p1 + 
+  theme_classic() +
+  scale_fill_manual(values=c('#F8766D','#00BD57','blue'))+
+#  scale_color_manual(values=c('black','black','black'))+
+  scale_y_continuous(breaks=c(0,30,60,90,120))
+```
+
+# Boxplot grouped
+
+```{r}
+#boxplot
+bar_width = 0.35
+jitter_width = 0.05
+dodge_width = 0.5
+line_width = 1
+
+p4 <- ggplot(df, aes(x = time, y = value, fill = group)) +
+  geom_boxplot(
+    outliers = F,
+    alpha = 1, 
+    width = bar_width,
+    position = position_dodge(width = dodge_width)
+  ) +
+
+  geom_point(
+    size =1,
+    shape = 16,
+    alpha = 1,
+    position = position_jitterdodge(jitter.width = jitter_width, dodge.width = dodge_width)
+  )
+  
+
+p4 +  
+  theme_classic() +
+  scale_fill_manual(values=c('#F8766D','#00BD57','blue'))
+
+```
+
+# Violin plot
+
+## 以PIN7的荧光强度为例子
+
+```{r}
+# ==== 设置基因名称 ====
+target_gene <- "PIN7"   # 这里改成 "PIN4" 就能复用整个脚本
+
+# ==== 读取数据 ====
+file_name <- paste0(target_gene, " stele.xlsx")
+measure <- read.xlsx(file_name, sheet = 2)
+
+df <- measure[, 1:2] %>% melt()
+df <- df[!is.na(df[,2]), ]
+colnames(df) <- c('sample', 'value')
+#df$value <- df$value/median(df$value)
+
+# ==== t-test ====
+t_test_res <- t.test(value ~ sample, data = df, var.equal = TRUE)
+print(t_test_res)
+pval <- signif(t_test_res$p.value, 2)
+p_label <- paste0("P = ", pval)
+
+# ==== 绘图 ====
+p <- ggplot(df, aes(x = sample, y = value, fill = sample)) +
+  geom_violin(alpha = 1, width = 0.3, trim = FALSE) +
+  geom_jitter(size = 1, shape = 16, width = 0.08, alpha = 1) +
+  stat_summary(fun = median, geom = "crossbar", color = "black",
+               linewidth = 0.5, width = 0.3) 
+
+
+p<- p + 
+  labs(title = target_gene, y = "ratio") +
+  annotate("text", x = 1.5, y = max(df$value) * 1.4,
+           label = p_label, size = 5) +
+  theme_classic() +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5)
+  )
+
+print(p)
+
+file_name <- paste0(target_gene, "-ratio.pdf")
+pdf(file_name, width = 3.25, height = 3.9)
+print(p)
+dev.off()
+```
+
+## 添加vertical line展示范围
+
+```{r}
+
+# add vertical lines
+Q1 = function (x) quantile(x,0.25)
+Q3 = function (x) quantile(x,0.75)
+Max_wo = function (x) max(subset(x,x < Q3(x) + 1.5*IQR(x)))
+Min_wo = function (x) min(subset(x,x > Q1(x) - 1.5*IQR(x)))
+```
+
+## outlier 加 t.test版本
+
+```{r}
+df$value <- df$value/median(df$value)
+
+# ---- 去掉 outlier 用于 t-test ----
+df_no_out <- df %>%
+  group_by(sample) %>%
+  mutate(is_outlier = value < (quantile(value, 0.25) - 1.5*IQR(value)) |
+           value > (quantile(value, 0.75) + 1.5*IQR(value))) %>%
+  ungroup()
+
+# 只保留非 outlier 进行 t-test
+t_test_res <- t.test(value ~ sample, data = filter(df_no_out, !is_outlier))
+print(t_test_res)
+
+# ---- 画图（包含 outlier） ----
+p <- ggplot(df, aes(x = sample, y = value, fill = sample)) +
+  geom_boxplot(outlier.shape = NA, outlier.size = 1, alpha = 0.7,width=0.3) +
+  geom_jitter(width = 0.1, size = 1, alpha = 0.9) +
+  theme_classic() +
+  scale_fill_manual(values = c('#F8766D', '#00BD57'))
+
+print(p)
+```
+
+# Circular histo
+
+```{r}
+sample=read.xlsx("统计.xlsx",sheet = 1)  #read data, Macbook need add  sep=";" 
+
+#sample=c(0,1,2,3,19,20,30,40,10)
+
+```
+
+## circular 画图的参数
+
+```{r}
+# plot options !!!!!!!
+yoffset = -0.3 #set y offset(inner circle size)
+ylimit=1  #set y limit#
+
+degree = 30   #set interval degree here
+mycolor = "maroon4"  #set color
+
+
+Mydirection = 1 # set direction 1=clockwise,  -1 = anti-clockwise
+Mystart = 0 # set start angle, pi=180
+range_from = -180
+range_to= 180
+```
+
+```{r}
+
+#plot circular histograph
+h = hist(sample,breaks = seq(from = range_from, to = range_to, by = degree))
+
+d <- as.data.frame(list(Angle = h$mids, Frequency = h$density * degree))
+
+```
+
+### 版本1
+
+```{r}
+#plot version #1
+
+ggplot(d, aes(x = Angle, y = Frequency)) +
+  coord_polar(theta = "x", start = Mystart , direction = Mydirection) +
+  scale_y_continuous(limits = c(yoffset,ylimit)) +
+  
+  geom_vline(xintercept = seq(range_from,range_to,degree),color="white")+
+  geom_hline(yintercept=1,color="black")+
+  geom_hline(yintercept=0.5,color="white")+
+  
+  geom_bar(stat = "identity", fill = mycolor) +
+  
+  
+  theme(axis.text.x = element_blank()) +
+  theme(axis.text.y = element_blank())+
+  theme(panel.grid = element_blank()) 
+```
+
+### 版本2
+
+```{r}
+#plot version #2
+
+ggplot(d, aes(x = Angle, y = Frequency)) +
+  coord_polar(theta = "x", start = Mystart , direction = Mydirection) +
+  geom_bar(stat = "identity", fill = mycolor) +
+  scale_y_continuous(limits = c(yoffset,ylimit)) +
+  
+  geom_hline(yintercept=0,color="black") +
+  geom_segment(aes(x=seq(range_from, range_to-degree, degree), xend=seq(range_from, range_to-degree, degree), y= yoffset/10, yend=0),size=0.2,color="black")+
+  
+  theme_bw()+
+  theme(panel.grid = element_blank()) +
+  theme(axis.text.x = element_blank())+
+  theme(axis.text.y = element_blank()) 
+```
+
+# 火山图
+
+```{r}
+dfp <- dfp %>%
+  mutate(gene_type = case_when(foldchange >= log10(2) & qval <= 0.05 ~ "up",
+                               #log10FD <= log10(0.5) & qval <= 0.05 ~ "down",
+                               TRUE ~ "ns"))  
+
+#volcano plot
+cols <- c("up" = "firebrick", "down" = "#26b3ff", "ns" = "grey") 
+sizes <- c("up" = 3, "down" = 3, "ns" = 2) 
+alphas <- c("up" = 1, "down" = 1, "ns" = 0.5)
+
+dfp %>%
+  ggplot(aes(x = foldchange,
+             y = -log10(qval),
+             fill = gene_type,    
+             size = gene_type,
+             alpha = gene_type)) + 
+  geom_point(shape = 21, # Specify shape and colour as fixed local parameters    
+             ) + 
+  geom_hline(yintercept = -log10(0.05),
+             linetype = "dashed") + 
+  geom_vline(xintercept = c(log2(0.5), log2(2)),
+             linetype = "dashed") +
+  scale_fill_manual(values = cols) + # Modify point colour
+  scale_size_manual(values = sizes) + # Modify point size
+  scale_alpha_manual(values = alphas) + # Modify point transparency
+  scale_x_continuous(breaks = c(seq(-6, 15, 2)),       
+                     limits = c(-6, 15))  
+```
+
+# Heatmap
+
+## ggplot2版本比较慢，不适合很多基因画图
+
+```{r}
+#pick genelist
+genelist = read.xlsx("genelist_SAUR.xlsx",sheet=1)
+genelist$gene=as.factor(genelist$gene)
+genelist$gene <- fct_inorder(genelist$gene)
+#dfLong$gene <- fct_rev(dfLong$gene)
+
+#merge with read counts
+deg=read.xlsx("RNASEQ-batch1_deg_analysis.xlsx",sheet=2)
+
+m = merge(genelist,deg,by="gene",all.x = T,sort = F)
+
+#write.xlsx(m,"SAURexpression-batch1.xlsx",rowNames=F)
+
+hm_plot = m[,-c(1:2)]
+
+row.names(hm_plot)=m[,2]
+
+df=hm_plot[,c(1,3,5)]
+
+#remove NA values, all-zero rows, and limit to range
+df[is.na(df)]=0
+
+df <- df[rowSums(df) != 0, ]
+
+df[df>4]=4
+
+df[df<(-4)]=-4
+
+#scale if Z-score is required
+df_scale_row = t(scale(t(df))) %>% as.data.frame()
+df_scale_row <- remove_empty(df_scale_row,which="rows")
+
+#transform
+dfLong = df_scale_row %>%
+  rownames_to_column("gene") %>%
+  pivot_longer(-1,names_to = "condition",values_to = "value")
+
+dfLong$condition=as.factor(dfLong$condition)
+dfLong$condition <- fct_inorder(dfLong$condition)
+
+#phylo-tree
+phY <- df_scale_row %>%
+  dist(method = "euclidean")%>%
+  hclust(method = "complete")%>%
+  ggtree(layout="rectangular",branch.length="none")
+
+
+phX <- df_scale_row %>%
+  t()%>%
+  dist(method = "euclidean")%>%
+  hclust(method = "complete")%>%
+  ggtree(layout="rectangular",branch.length="none")+
+  layout_dendrogram()
+
+#heatmap
+p1 <- ggplot(dfLong,aes(x=condition,y=gene,fill=value))+
+  geom_raster()+
+  scale_fill_gradient2(low="darkblue", high="orange", mid="white")+
+  scale_y_discrete(position="right") +
+  
+  theme_minimal()+
+  theme(panel.grid=element_blank())+
+  
+  theme(axis.text.y = element_blank())+
+  theme(axis.text.x = element_text(size = 3.5, angle=60))
+p1
+
+p1 %>%
+  insert_left(phY,width=.2) 
+```
+
+## Pheatmap包比较快速，颜色默认也还不错
+
+```{r}
+mydata<-read.csv("expr_log2means.csv")
+df=mydata[,-1]
+rownames(df)=mydata[,1]
+df_scaled=t(scale(t(df)))
+
+gene.to.plt = read.csv('22 genes for heatmap.csv')
+
+idx = intersect(rownames(df_scaled),ROI_genelist)
+
+df_plot=df_scaled[idx,]
+
+
+p2 <- pheatmap(df_plot,
+               cluster_rows = T,
+               cluster_cols = FALSE,
+               scale = "none", #已经scale过了
+               color = colorRampPalette(c("navy", "white", "firebrick3"))(50),
+               # 在每两列之间加入间隔
+               #gaps_col = c(2, 4, 6),  
+               show_rownames = T,
+               fontsize_col = 5
+)
+
+
+# 计算行聚类和基因顺序
+row_dist <- dist(t(scale(t(log2(expr_matrix + 1)))))
+row_clust <- hclust(row_dist, method = "complete")
+gene_order <- rownames(expr_matrix)[row_clust$order]
+expr_matrix <- expr_matrix[match(gene_order, rownames(expr_matrix)), ]
+```
+
+```{r}
+
+```

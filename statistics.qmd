@@ -1,0 +1,745 @@
+---
+title: "Statics"
+format: html
+author: "Deng Zhaoguo"
+date: "`r Sys.Date()`"
+self-contained: true
+toc: true       # 显示目录
+toc-depth: 5    # 显示三级标题
+execute:
+  eval: false
+  echo: TRUE
+  warning: FALSE
+  message: FALSE
+---
+
+# load
+
+```{r}
+library('bootstrap')
+library('fields')
+library('mclust'); 
+library("RHmm")
+library("car")
+library("openxlsx")
+library('reshape2')
+library("survival")
+library('ggplot2')
+library('openxlsx')
+library('reshape2')
+library('dplyr')
+```
+
+# bootstrap
+
+```{r}
+#####bootstrap
+norm.data <- rnorm(500, mean=5000, sd=100)
+
+chisq.data <- rchisq(500, 3)
+boots <- function(data, R){
+  b.avg <<- c(); b.sd <<- c()
+  for(b in 1:R) {
+    ystar <- sample(data,length(data),replace=T)
+    b.avg <<- c(b.avg,mean(ystar))
+    b.sd  <<- c(b.sd,sd(ystar))}
+}
+
+
+boots.median <- function(data, R){
+  b.median <<- c();
+  for(b in 1:R) {
+    ystar <- sample(data,length(data),replace=T)
+    b.median<<- c(b.median,median(ystar))
+  }
+}
+
+
+boots.median(norm.data, 1000)
+boots(norm.data, 1000)
+
+x = c(1:1000)/100
+y = dchisq(x,3)
+plot(x,y,type="l")
+
+boots(chisq.data, 1000)
+boots.median(chisq.data, 1000)
+
+
+#####regression
+x = rnorm(500,mean=0,sd=4)
+y = 1+x*3 + rnorm(500,sd=5)
+
+data.reg = data.frame(x=x,y=y)
+model.reg = lm(y~x,data=data.reg)
+
+boot.regression = function(data,R){
+  beta0 <<- c()
+  beta1 <<- c()
+  for(i in 1:R){
+    ind = sample.int(nrow(data),size=nrow(data),replace=TRUE)
+    data.tmp = data[ind,]
+    model.reg.tmp = lm(y~x,data=data.tmp)
+    beta0 <<- c(beta0,model.reg.tmp$coef[1])
+    beta1 <<- c(beta1,model.reg.tmp$coef[2])
+    
+  }
+}
+
+boot.regression(data.reg,1000)
+
+boot.regression.res = function(lm.model,data,R){
+  beta0.res<<-c()
+  beta1.res<<-c()
+  for(i in 1:R){
+    res.tmp = sample(lm.model$res,nrow(data),replace=TRUE)
+    data.tmp = data
+    data.tmp$y = lm.model$fitted + res.tmp
+    model.reg.tmp = lm(y~x,data=data.tmp)
+    beta0.res <<- c(beta0.res,model.reg.tmp$coef[1])
+    beta1.res <<- c(beta1.res,model.reg.tmp$coef[2])
+  }
+}
+
+boot.regression.res(model.reg,data.reg,1000)
+
+```
+
+# chisq test
+
+```{r}
+# 输入观察频数和预期比例
+observed <- c(69, 68)    # 观察到的频数
+expected_ratio <- c(1, 1) # 预期的比例（1:1）
+
+# 执行卡方拟合优度检验
+test_result <- chisq.test(
+  x = observed,           # 观察频数向量
+  p = expected_ratio/sum(expected_ratio)  # 将比例转换为概率
+)
+
+# 打印完整结果
+print(test_result)
+
+```
+
+# hclust and k-means
+
+```{r}
+####density estimation
+
+###Simulation data
+phi = function(x){
+  0.8*dnorm(x,sd=0.5) + 0.2*dnorm(x,mean=2,sd=0.3)
+}
+
+x = seq(-5,5,by=0.01)
+y = sapply(x,FUN=phi)
+plot(x,y,type="l")
+
+x = c()
+for(i in 1:1000){
+  if(runif(1)<=0.8) x[i] = rnorm(1,sd=0.5) else x[i] = rnorm(1,mean=2,sd=0.3)
+}
+hist(x)
+
+
+dvals = rep(0,length(x))
+h = 0.2
+x = sort(x)
+for(i in 1:length(x)){
+  dvals[i] = dvals[i] + sum(x<x[i]+h & x>x[i]-h)/(2*h*length(x))
+}
+plot(x,dvals,col="blue",type="l",lwd=2)
+
+
+dens = density(x); 
+plot(dens,col="blue",lwd=3); 
+
+dvals = rep(0,length(dens$x))
+for(i in 1:length(x)){
+  dvals = dvals + dnorm(dens$x,mean=x[i],sd=dens$bw)/length(x)
+}
+plot(dens,col="red",lwd=3); points(dens$x,dvals,col="blue",pch=19,cex=0.5)
+
+
+####real data
+
+
+data(stamp)
+str(stamp)
+thick = stamp$Thickness
+
+dens = density(thick); 
+plot(dens,col="blue",lwd=3); 
+dvals = rep(0,length(dens$x))
+for(i in 1:length(thick)){
+  dvals = dvals + dnorm(dens$x,mean=thick[i],sd=dens$bw)/length(thick)
+}
+plot(dens,col="red",lwd=3); points(dens$x,dvals,col="blue",pch=19,cex=0.5)
+
+
+####Hierarchical clustering - example
+install.packages("fields")
+
+set.seed(1234); par(mar=c(0,0,0,0))
+x <- rnorm(12,mean=rep(1:3,each=4),sd=0.2)
+y <- rnorm(12,mean=rep(c(1,2,1),each=4),sd=0.2)
+plot(x,y,col="blue",pch=19,cex=2)
+text(x+0.05,y+0.05,labels=as.character(1:12))
+
+
+
+
+dataFrame <- data.frame(x=x,y=y)
+dist(dataFrame)
+
+
+
+dataFrame <- data.frame(x=x,y=y)
+rdistxy <- rdist(dataFrame)
+diag(rdistxy) <- diag(rdistxy) + 1e5
+
+### 1st step
+# Find the index of the points with minimum distance
+ind <- which(rdistxy == min(rdistxy),arr.ind=TRUE)
+par(mfrow=c(1,2),mar=rep(0.2,4))
+# Plot the points with the minimum overlayed
+plot(x,y,col="blue",pch=19,cex=2)
+text(x+0.05,y+0.05,labels=as.character(1:12))
+points(x[ind[1,]],y[ind[1,]],col="orange",pch=19,cex=2)
+
+# Make a cluster and cut it at the right height
+distxy <- dist(dataFrame)
+hcluster <- hclust(distxy)
+dendro <- as.dendrogram(hcluster)
+cutDendro <- cut(dendro,h=(hcluster$height[1]+0.00001) )
+plot(cutDendro$lower[[11]],yaxt="n")
+
+
+###2nd step
+
+
+dataFrame <- data.frame(x=x,y=y)
+rdistxy <- rdist(dataFrame)
+diag(rdistxy) <- diag(rdistxy) + 1e5
+
+# Find the index of the points with minimum distance
+ind <- which(rdistxy == min(rdistxy),arr.ind=TRUE)
+par(mar=rep(0.2,4))
+# Plot the points with the minimum overlayed
+plot(x,y,col="blue",pch=19,cex=2)
+text(x+0.05,y+0.05,labels=as.character(1:12))
+points(x[ind[1,]],y[ind[1,]],col="orange",pch=19,cex=2)
+points(mean(x[ind[1,]]),mean(y[ind[1,]]),col="black",cex=3,lwd=3,pch=3)
+points(mean(x[ind[1,]]),mean(y[ind[1,]]),col="orange",cex=5,lwd=3,pch=1)
+
+
+###3rd step
+
+
+dataFrame <- data.frame(x=x,y=y)
+rdistxy <- rdist(dataFrame)
+diag(rdistxy) <- diag(rdistxy) + 1e5
+
+# Find the index of the points with minimum distance
+ind <- which(rdistxy == rdistxy[order(rdistxy)][3],arr.ind=TRUE)
+par(mfrow=c(1,3),mar=rep(0.2,4))
+# Plot the points with the minimum overlayed
+plot(x,y,col="blue",pch=19,cex=2)
+text(x+0.05,y+0.05,labels=as.character(1:12))
+points(x[c(5,6)],y[c(5,6)],col="orange",pch=19,cex=2)
+points(x[ind[1,]],y[ind[1,]],col="red",pch=19,cex=2)
+
+# Make dendogram plots
+distxy <- dist(dataFrame)
+hcluster <- hclust(distxy)
+dendro <- as.dendrogram(hcluster)
+cutDendro <- cut(dendro,h=(hcluster$height[2]) )
+plot(cutDendro$lower[[10]],yaxt="n")
+plot(cutDendro$lower[[5]],yaxt="n")
+
+
+###Hierarchical clustering - hclust
+dataFrame <- data.frame(x=x,y=y)
+distxy <- dist(dataFrame)
+hClustering <- hclust(distxy)
+plot(hClustering)
+
+
+
+###heatmap
+dataFrame <- data.frame(x=x,y=y)
+set.seed(143)
+dataMatrix <- as.matrix(dataFrame)[sample(1:12),]
+heatmap(dataMatrix)
+
+
+
+#####K-means step by step
+
+set.seed(1234); par(mar=c(0,0,0,0))
+x <- rnorm(12,mean=rep(1:3,each=4),sd=0.2)
+y <- rnorm(12,mean=rep(c(1,2,1),each=4),sd=0.2)
+plot(x,y,col="blue",pch=19,cex=2)
+text(x+0.05,y+0.05,labels=as.character(1:12))
+
+#### K-means clustering - starting centroids
+par(mar=rep(0.2,4))
+plot(x,y,col="blue",pch=19,cex=2)
+text(x+0.05,y+0.05,labels=as.character(1:12))
+cx <- c(1,1.8,2.5)
+cy <- c(2,1,1.5)
+points(cx,cy,col=c("red","orange","purple"),pch=3,cex=2,lwd=2)
+
+
+#### K-means clustering - assign to closest centroid
+par(mar=rep(0.2,4))
+plot(x,y,col="blue",pch=19,cex=2)
+cols1 <- c("red","orange","purple")
+text(x+0.05,y+0.05,labels=as.character(1:12))
+cx <- c(1,1.8,2.5)
+cy <- c(2,1,1.5)
+points(cx,cy,col=cols1,pch=3,cex=2,lwd=2)
+
+## Find the closest centroid
+distTmp <- matrix(NA,nrow=3,ncol=12)
+distTmp[1,] <- (x-cx[1])^2 + (y-cy[1])^2
+distTmp[2,] <- (x-cx[2])^2 + (y-cy[2])^2
+distTmp[3,] <- (x-cx[3])^2 + (y-cy[3])^2
+newClust <- apply(distTmp,2,which.min)
+points(x,y,pch=19,cex=2,col=cols1[newClust])
+
+
+###### K-means clustering - recalculate centroids
+par(mar=rep(0.2,4))
+plot(x,y,col="blue",pch=19,cex=2)
+cols1 <- c("red","orange","purple")
+text(x+0.05,y+0.05,labels=as.character(1:12))
+
+## Find the closest centroid
+distTmp <- matrix(NA,nrow=3,ncol=12)
+distTmp[1,] <- (x-cx[1])^2 + (y-cy[1])^2
+distTmp[2,] <- (x-cx[2])^2 + (y-cy[2])^2
+distTmp[3,] <- (x-cx[3])^2 + (y-cy[3])^2
+newClust <- apply(distTmp,2,which.min)
+points(x,y,pch=19,cex=2,col=cols1[newClust])
+newCx <- tapply(x,newClust,mean)
+newCy <- tapply(y,newClust,mean)
+
+## Old centroids
+
+cx <- c(1,1.8,2.5)
+cy <- c(2,1,1.5)
+
+points(newCx,newCy,col=cols1,pch=3,cex=2,lwd=2)
+
+
+#####K-means clustering - reassign values
+par(mar=rep(0.2,4))
+plot(x,y,col="blue",pch=19,cex=2)
+cols1 <- c("red","orange","purple")
+text(x+0.05,y+0.05,labels=as.character(1:12))
+
+
+cx <- c(1,1.8,2.5)
+cy <- c(2,1,1.5)
+
+
+## Find the closest centroid
+distTmp <- matrix(NA,nrow=3,ncol=12)
+distTmp[1,] <- (x-cx[1])^2 + (y-cy[1])^2
+distTmp[2,] <- (x-cx[2])^2 + (y-cy[2])^2
+distTmp[3,] <- (x-cx[3])^2 + (y-cy[3])^2
+newClust <- apply(distTmp,2,which.min)
+newCx <- tapply(x,newClust,mean)
+newCy <- tapply(y,newClust,mean)
+
+## Old centroids
+
+points(newCx,newCy,col=cols1,pch=3,cex=2,lwd=2)
+
+
+## Iteration 2
+distTmp <- matrix(NA,nrow=3,ncol=12)
+distTmp[1,] <- (x-newCx[1])^2 + (y-newCy[1])^2
+distTmp[2,] <- (x-newCx[2])^2 + (y-newCy[2])^2
+distTmp[3,] <- (x-newCx[3])^2 + (y-newCy[3])^2
+newClust2 <- apply(distTmp,2,which.min)
+
+points(x,y,pch=19,cex=2,col=cols1[newClust2])
+
+
+
+##### K-means clustering - update centroids
+
+par(mar=rep(0.2,4))
+plot(x,y,col="blue",pch=19,cex=2)
+cols1 <- c("red","orange","purple")
+text(x+0.05,y+0.05,labels=as.character(1:12))
+
+
+cx <- c(1,1.8,2.5)
+cy <- c(2,1,1.5)
+
+## Find the closest centroid
+distTmp <- matrix(NA,nrow=3,ncol=12)
+distTmp[1,] <- (x-cx[1])^2 + (y-cy[1])^2
+distTmp[2,] <- (x-cx[2])^2 + (y-cy[2])^2
+distTmp[3,] <- (x-cx[3])^2 + (y-cy[3])^2
+newClust <- apply(distTmp,2,which.min)
+newCx <- tapply(x,newClust,mean)
+newCy <- tapply(y,newClust,mean)
+
+
+
+## Iteration 2
+distTmp <- matrix(NA,nrow=3,ncol=12)
+distTmp[1,] <- (x-newCx[1])^2 + (y-newCy[1])^2
+distTmp[2,] <- (x-newCx[2])^2 + (y-newCy[2])^2
+distTmp[3,] <- (x-newCx[3])^2 + (y-newCy[3])^2
+finalClust <- apply(distTmp,2,which.min)
+
+
+## Final centroids
+finalCx <- tapply(x,finalClust,mean)
+finalCy <- tapply(y,finalClust,mean)
+points(finalCx,finalCy,col=cols1,pch=3,cex=2,lwd=2)
+
+
+
+points(x,y,pch=19,cex=2,col=cols1[finalClust])
+
+
+####kmeans()
+
+dataFrame <- data.frame(x,y)
+kmeansObj <- kmeans(dataFrame,centers=3)
+names(kmeansObj)
+kmeansObj$cluster
+par(mar=rep(0.2,4))
+plot(x,y,col=kmeansObj$cluster,pch=19,cex=2)
+points(kmeansObj$centers,col=1:3,pch=3,cex=3,lwd=3)
+
+
+
+###mclust
+
+data(faithful); 
+faithfulMclust <- Mclust(faithful)
+summary(faithfulMclust,parameters=TRUE)
+
+
+
+
+###### Pathological example
+
+clust1 = data.frame(x=rnorm(100),y=rnorm(100))
+a = runif(100,0,2*pi)
+clust2 = data.frame(x=8*cos(a) + rnorm(100),y=8*sin(a) + rnorm(100))
+plot(clust2,col='blue',pch=19); points(clust1,col='green',pch=19)
+
+###cluster by k-means
+dat = rbind(clust1,clust2)
+kk = kmeans(dat,centers=2)
+plot(dat,col=(kk$clust+2),pch=19)
+```
+
+# HMM
+
+```{r}
+####go to https://r-forge.r-project.org/R/?group_id=85
+
+###download .zip file if you are using windows 
+###or .tar.gz file if you are using unix-based systems
+###then install from local file
+
+###or if you are using unix-based systems directly run
+### install.packages("RHmm", repos="http://R-Forge.R-project.org")
+
+
+
+m1 <- c(1,1)
+m2 <- c(-2, -2)
+cov1 <- matrix(c(1, 1, 1, 4)/4, nrow=2)
+cov2 <- matrix(c(1, -1, -1, 9)/4, nrow=2)
+n_2d_2s <- distributionSet("NORMAL", mean=list(m1, m2),
+                           cov=list(cov1, cov2))
+
+initProb2 <- rep(1,2)/2
+transMat2 <- rbind(c(0.9, 0.1), c(0.2, 0.8))
+
+hmm1 <- HMMSet(initProb2, transMat2, n_2d_2s)
+
+
+x.sim = HMMSim(1000, hmm1)
+
+plot(x.sim$obs[,1],x.sim$obs[,2],xlab="x",ylab="y")
+
+bic = c()
+for(n in 2:10){
+  tmp1 = HMMFit(x.sim$obs,nStates=n,control=list(nInit=10))
+  bic = c(bic,tmp1$BIC)
+}
+
+plot(bic)
+
+hmmfit = HMMFit(x.sim$obs,nStates=2,control=list(nInit=10))
+##look at the states
+hmmfit$HMM
+
+state.pred = viterbi(hmmfit, x.sim$obs)
+
+plot(state.pred$states-x.sim$states,type="h")
+
+
+#### real data
+
+load("cnv.RData") ### you need to put the data under the working directory to load the data
+plot(y)
+
+hmmfit = HMMFit(y,nStates=4,control=list(nInit=10))
+state.pred = viterbi(hmmfit, y)
+plot(y)
+lines(hmmfit$HMM$distribution$mean[state.pred$states],col="red")
+
+
+
+
+hmmfit = HMMFit(y,nStates=5,control=list(nInit=10))
+state.pred = viterbi(hmmfit, y)
+plot(y)
+lines(hmmfit$HMM$distribution$mean[state.pred$states],col="red")
+
+```
+
+# leveneTest-multiple comparison
+
+```{r}
+#install.packages("car")
+
+
+#read and transform data
+path="C:/Users/emmashana/Desktop"
+setwd(path)
+
+filenames=grep(".xlsx",list.files(),value=T)
+
+m1=read.xlsx(filenames[4],sheet=1)
+
+m2 = melt(m1)
+
+#subtract genotype
+
+genotype=m2$variable[!duplicated(m2$variable)]
+
+n=length(genotype)
+
+pval=matrix(nrow=(n*(n-1))/2,ncol=2)
+
+#leveneTest
+k=1
+for (i in 1:(n-1)) {
+ 
+  for (j in (i+1):n){
+
+    m3 = subset(m2,(m2$variable == genotype[i] | m2$variable == genotype[j]))
+    
+    result=leveneTest(value~variable,m3)
+    
+    pval[k,1]=paste(genotype[i],"vs",genotype[j])
+    
+    pval[k,2]=result[1,3]
+    
+    k = k+1
+  }
+}
+
+#multi-comparison p value correction
+padj = p.adjust(pval[,2], method = "BH")
+qvalue=cbind(pval[,1],padj)
+
+```
+
+# multiple test
+
+```{r}
+
+####NULL hypotheses are all true
+set.seed(1010093)
+pValues <- rep(NA,1000)
+for(i in 1:1000){
+  y <- rnorm(20)
+  x <- rnorm(20)
+  pValues[i] <- summary(lm(y ~ x))$coeff[2,4]
+}
+
+# Controls type I error
+sum(pValues < 0.05)
+
+
+# Controls FWER 
+sum(p.adjust(pValues,method="bonferroni") < 0.05)
+
+
+###we could do more times
+
+ben.rejct = c()
+for(j in 1:100){
+  pValues <- rep(NA,1000)
+  for(i in 1:1000){
+    y <- rnorm(20)
+    x <- rnorm(20)
+    pValues[i] <- summary(lm(y ~ x))$coeff[2,4]
+  }
+  tmp = sum(p.adjust(pValues,method="bonferroni") < 0.05)
+  ben.rejct = c(ben.rejct,tmp)
+}
+
+##control FWER by hochberg
+sum(p.adjust(pValues,method="hochberg") < 0.05)
+
+# Controls FDR 
+sum(p.adjust(pValues,method="BH") < 0.05)
+
+
+
+####50% of NULL hypothesis are true
+set.seed(1010093)
+pValues <- rep(NA,1000)
+for(i in 1:1000){
+  x <- rnorm(20)
+  # First 500 beta=0, last 500 beta=2
+  if(i <= 500){y <- rnorm(20)}else{ y <- rnorm(20,mean=2*x)}
+  pValues[i] <- summary(lm(y ~ x))$coeff[2,4]
+}
+trueStatus <- rep(c("zero","notZero"),each=500)
+tmp = table(pValues < 0.05, trueStatus)
+rownames(tmp) = c("retain","reject")
+tmp
+
+
+# Controls FWER 
+tmp = table(p.adjust(pValues,method="bonferroni") < 0.05,trueStatus)
+rownames(tmp) = c("retain","reject")
+tmp
+
+
+tmp = table(p.adjust(pValues,method="hommel") < 0.05,trueStatus)
+rownames(tmp) = c("retain","reject")
+tmp
+
+
+# Controls FDR 
+tmp = table(p.adjust(pValues,method="BH") < 0.05,trueStatus)
+rownames(tmp) = c("retain","reject")
+tmp
+
+# Controls FDR
+tmp = table(p.adjust(pValues,method="BY") < 0.05,trueStatus)
+rownames(tmp) = c("retain","reject")
+tmp
+
+par(mfrow=c(1,2))
+plot(pValues,p.adjust(pValues,method="bonferroni"),pch=19)
+plot(pValues,p.adjust(pValues,method="BH"),pch=19)
+
+
+
+par(mfrow=c(1,2))
+plot(pValues,p.adjust(pValues,method="BH"),pch=19)
+plot(pValues,p.adjust(pValues,method="BY"),pch=19)
+
+par(mfrow=c(1,2))
+plot(pValues,p.adjust(pValues,method="bonferroni"),pch=19)
+plot(pValues,p.adjust(pValues,method="hommel"),pch=19)
+
+
+
+p1 = p.adjust(pValues,method="bonferroni") 
+p2 = p.adjust(pValues,method="hommel")
+
+sum(p2<p1)
+```
+
+# QQ plot
+
+```{r}
+### quantile-quantile plot (QQ-plot)
+### BMI
+m1 = mean(Pima.tr$bmi)
+sd = sd(Pima.tr$bmi)
+prb = (1:nrow(Pima.tr))/nrow(Pima.tr)
+q.n = qnorm(prb,mean=m1,sd=sd)
+plot(sort(Pima.tr$bmi),q.n,xlab="Observed Quantile",ylab="Theoretical Quantile",main="QQ-plot of BMI in Pima.tr")
+abline(a=0,b=1,col="red",lwd=2)
+###Petal.Length
+m1 = mean(iris$Petal.Length)
+sd = sd(iris$Petal.Length)
+prb = (1:nrow(iris))/nrow(iris)
+q.n = qnorm(prb,mean=m1,sd=sd)
+plot(sort(iris$Petal.Length),q.n,xlab="Observed Quantile",ylab="Theoretical Quantile",main="QQ-plot of BMI in Pima.tr")
+abline(a=0,b=1,col="red",lwd=2)
+```
+
+# survival analysis
+
+```{r}
+setwd("D:/AAIS/16 spring/????ͳ??/??ҵ3")
+
+
+surdata=read.csv2("melanom-surv.csv")
+colnames(surdata)[1]="id"
+
+#censor status 2 and status 3
+surdata$event=0
+surdata$event[surdata$status==1]= 1
+coxres=coxph(Surv(time,event)~sex,data=surdata)
+summary(coxres)
+
+#censor status 2 only
+surdata$event=1
+surdata$event[surdata$status==2]= 0
+coxres=coxph(Surv(time,event)~sex,data=surdata)
+summary(coxres)
+
+#KM plot
+survFitObj <- survfit(Surv(time/365, event)~sex,data=surdata, conf.int = 0.95)
+plot(survFitObj,col =c("red","blue"),xlab = "year",ylab="survival")
+legend("topright",inset=.05,c("female","male"),lty=c(1,1),col=c("red","blue"))
+
+
+#multiple cox
+coxres2=coxph(Surv(time,event)~sex+age+ulc+log2(thick),data=surdata)
+summary(coxres2)
+
+
+coxres=coxph(Surv(time,event)~sex+age+ulc+thick,data=surdata)
+summary(coxres)
+
+
+cox.zph(coxres2)
+print(temp)
+plot(temp)
+baselineFitObj <- survfit(coxph(Surv(time, event) ~ sex+age+ulc+log2(thick), data=surdata))
+plot(baselineFitObj , col=c("red", "black","green","blue"), fun="cloglog")
+
+
+
+```
+
+# t.test
+
+```{r}
+# Read data
+measure <- read.xlsx("2024.4.15-DR5-S2S3.xlsx", sheet = 2)
+df <- measure[, 3:4] %>% melt()
+df <- df[!is.na(df[,2]), ]
+colnames(df) <- c('sample', 'value')
+df$value <- df$value/median(df$value)
+
+
+# t-test（不含 outlier）
+t_test_res <- t.test(value ~ sample, data = df, var.equal=T)
+print(t_test_res)
+```
