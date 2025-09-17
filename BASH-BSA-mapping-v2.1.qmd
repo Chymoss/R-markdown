@@ -1,5 +1,5 @@
 ---
-title: "BSA-GATK-doc"
+title: "BASH-BSA-mapping"
 author: "Deng Zhaoguo"
 format: html
 self-contained: true
@@ -12,6 +12,8 @@ execute:
   warning: FALSE
   message: FALSE
 ---
+
+# ATT：只是学习笔记，请以同版本的sh文件为准
 
 # BSA，后面两个pool都是同步比对，同步 call SNP，最后合并 gVCF文件
 
