@@ -81,7 +81,7 @@ compare$qval <- p.adjust(compare$pval, method = "fdr")
 write.xlsx(compare, "raw_t_test.xlsx", rowNames = TRUE)
 ```
 
-\# Volcano plot
+# Volcano plot
 
 ```{r}
 data_import <- read.xlsx("raw_t_test.xlsx", sheet = 1)
