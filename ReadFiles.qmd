@@ -13,9 +13,7 @@ execute:
   message: FALSE
 ---
 
-# Read VCF files and annotate
-
-## 加载
+# 加载
 
 ```{r}
 
@@ -24,8 +22,57 @@ library(dplyr)
 library (tidyverse)
 ```
 
-## 把样品写在list中，以循环来定义输入文件和输出文件
+# 1. Find all files
+不想输入文件名，直接找到所有的 xlsx文件，注意把 qmd新建在同一文件夹就不需要定义路径了
+```{r}
+# find all xlsx files
+filenames=grep(".xlsx",list.files(),value=T)
 
+m1=read.xlsx(filenames[4],sheet=1)
+```
+
+# 2. Read multiple and merge
+定义要读入的文件也可以,这里展示多个文件 merge
+```{r}
+# defines files to read
+file_seq <- c(
+  'MS211267-ACT-B10.xlsx',
+  'MS211973-ACT1117.xlsx',
+  'MS221737-TB.xlsx',
+  'MS211267-DN2-B10.xlsx',
+  'MS211973-GTRD1117.xlsx',
+  'MS221737-GTRD.xlsx'
+)
+
+# read multiple and merge
+df_list <- lapply(file_seq, function(file) {
+  read.xlsx(file, sheet = 1)
+})
+
+df_merge <- reduce(df_list, full_join, by = "Accession") %>%
+  replace(is.na(.), 0)
+
+```
+
+
+# 3. Batch read and process
+把样品写在list中，以循环来定义输入文件和输出文件, batch process，批量处理对多个文件执行差不多的操作但是不merge
+```{r}
+samples <- c("W28", "W57", "W63", "W120", "W77", "W78")  
+
+for (sample in samples) {
+
+  input_file <- paste0(sample, ".combine.exonic_variant_function")
+  read.xlsx(input_file,sheet=1)
+  
+  output_file <- paste0(sample, "_annotated.xlsx")
+  write.xlsx(outputfile)
+
+}
+```
+
+
+#  Examples: Batch read VCF files and annotate
 ```{r}
 samples <- c("W28", "W57", "W63", "W120", "W77", "W78")  
 ref <- read.xlsx("PP_v6.1_synonym_anno.xlsx")
@@ -54,8 +101,7 @@ for (sample in samples) {
 }
 ```
 
-# Read MASS results and merge
-## 找到所有的 xlsx文件 / 定义要读入的文件也可以
+# Examples: Read mulitple MASS results and merge
 ```{r}
 # find all xlsx files
 filenames=grep(".xlsx",list.files(),value=T)
@@ -73,7 +119,7 @@ file_seq <- c(
 )
 ```
 
-## lapply读入函数，选取自己想要的列信息，同时进行筛选
+### lapply读入函数，选取自己想要的列信息，同时进行筛选
 
 ```{r}
 # Define columns: Accession (x1), Unique.peptides (x2), Abundance (x3)
@@ -92,7 +138,7 @@ df_list <- lapply(file_seq, function(file) {
 
 ```
 
-## Reduce函数，合并，合并函数: inner_join(full_join), intersect, %in% 等等都可以使用，顺手就行；Log2转换
+### Reduce函数，合并，合并函数: inner_join(full_join), intersect, %in% 等等都可以使用，顺手就行；Log2转换
 
 ```{r}
 df_merge <- reduce(df_list, full_join, by = "Accession") %>%
@@ -103,7 +149,7 @@ combine <- df_merge %>%
   mutate(across(-Accession, ~ log2(. + 1)))
 ```
 
-## 注释
+### 注释
 
 ```{r}
 #annotate
