@@ -4,8 +4,8 @@ author: "Deng Zhaoguo"
 format: html
 self-contained: true
 date: "`r Sys.Date()`"
-toc: true       # 显示目录
-toc-depth: 5    # 显示三级标题
+toc: true       
+toc-depth: 5    
 execute:
   eval: false
   echo: TRUE
@@ -20,7 +20,7 @@ Read MASS results, merge and t.test, volcano plot
 # Read files and merge, log2 transform
 
 ```{r}
-# 定义需要合并的文件
+# Files to merge
 file_seq <- c(
   'MS211267-ACT-B10.xlsx',
   'MS211973-ACT1117.xlsx',
@@ -30,12 +30,12 @@ file_seq <- c(
   'MS221737-GTRD.xlsx'
 )
 
-#确认文件 Accession (x1), Unique.peptides (x2), Abundance (x3)所在的列
+#Define columns: Accession (x1), Unique.peptides (x2), Abundance (x3)
 x1 <- 4
 x2 <- 11
 x3 <- 18
 
-# 读取并处理文件
+# Read and merge
 df_list <- lapply(file_seq, function(file) {
   read.xlsx(file, sheet = 1) %>%
     select(Accession = x1, Unique.Peptides = x2, Abundance = x3) %>%
@@ -45,26 +45,25 @@ df_list <- lapply(file_seq, function(file) {
     rename(!!file := Abundance)
 })
 
-# 合并所有文件并进行log2转化
+# log2 transform
 df_merge <- reduce(df_list, full_join, by = "Accession") %>%
   replace(is.na(.), 0)
 
 combine <- df_merge %>%
   mutate(across(-Accession, ~ log2(. + 1)))
 
-# 导出结果
+# export
 write.xlsx(combine, "raw_combine.xlsx")
 ```
 
 # T test
 
 ```{r}
-# 读取数据并设置行名
 combine <- read.xlsx("raw_combine.xlsx")
 
-# 提取数值部分并设置行名
+# Set column 1 to row names
 df_transform <- combine %>%
-  column_to_rownames(var = colnames(combine)[1])  # 将第一列设置为行名
+  column_to_rownames(var = colnames(combine)[1])
 
 
 #Add foldchange and pval
@@ -77,7 +76,7 @@ pval <- apply(df_transform, 1, function(x) t.test(x[sample], x[control], var.equ
 compare <- cbind(df_transform, foldchange, pval)
 compare$qval <- p.adjust(compare$pval, method = "fdr")
 
-# 输出结果
+# output
 write.xlsx(compare, "raw_t_test.xlsx", rowNames = TRUE)
 ```
 
@@ -90,7 +89,7 @@ data_import <- data_import %>%
   column_to_rownames(var = colnames(data_import)[1])
 
 
-# 过滤数据
+# Fileter
 n_repeat <- 1
 log2fc_cutoff <- 3
 sig_cutoff <- 0.05
@@ -101,20 +100,19 @@ data_plt <- data_import[rowSums(data_import[, 4:6] > 1) >= n_repeat, ] %>%
     TRUE ~ "ns"
   ))
 
-# 设置火山图参数
+# image options
 plot_params <- list(
   cols = c("up" = "firebrick", "down" = "#26b3ff", "ns" = "grey"),
   sizes = c("up" = 3, "down" = 3, "ns" = 2),
   alphas = c("up" = 1, "down" = 1, "ns" = 0.5)
 )
 
-# 绘制火山图
 p1 <- ggplot(data_plt, aes(x = foldchange, y = -log10(pval), fill = gene_type, size = gene_type, alpha = gene_type)) +
   theme_bw() +
   theme(panel.grid = element_blank()) +
-  geom_point(shape = 21) +  # 设置点的形状
+  geom_point(shape = 21) +
   geom_hline(yintercept = -log10(sig_cutoff), linetype = "dashed") +
-  geom_vline(xintercept = c(-log2fc_cutoff, log2fc_cutoff), linetype = "dashed") +  # 添加对称的竖线
+  geom_vline(xintercept = c(-log2fc_cutoff, log2fc_cutoff), linetype = "dashed") +
   scale_fill_manual(values = plot_params$cols) +
   scale_size_manual(values = plot_params$sizes) +
   scale_alpha_manual(values = plot_params$alphas)
@@ -123,31 +121,30 @@ p1 <- ggplot(data_plt, aes(x = foldchange, y = -log10(pval), fill = gene_type, s
 ## highlight *Gene Of Interest*
 
 ```{r}
-# 加载感兴趣基因列表
+# Load gene of interest (GOI)
 genelist_of_interest <- read.xlsx("GOI.xlsx")
 
-# 提取基因和注释信息
+# define gene name and gene symbol
 gene_name <- genelist_of_interest$gene
 symbol <- genelist_of_interest$annotation
 
-# 筛选需要标注的基因数据
-datapoints <- data_plt %>%
-  rownames_to_column(var = "gene") %>%  # 确保基因名为列
-  filter(gene %in% gene_name) %>%
-  mutate(annotation = symbol[match(gene, gene_name)])  # 添加对应注释信息
 
-# 绘制火山图并标注感兴趣基因
+datapoints <- data_plt %>%
+  rownames_to_column(var = "gene") %>%
+  filter(gene %in% gene_name) %>%
+  mutate(annotation = symbol[match(gene, gene_name)]) 
+
 p2 <- p1 +
   geom_text_repel(
     data = datapoints,
     aes(x = foldchange, y = -log10(pval), label = annotation),
-    size = 3,               # 标签字体大小
-    color = "black",        # 标签字体颜色
-    box.padding = 0.5,      # 标签与点之间的最小距离
-    point.padding = 0.3,    # 点与标签之间的额外间距
-    segment.color = "grey", # 指向线的颜色
-    segment.size = 0.5,     # 指向线的粗细
-    alpha = 0.8             # 标签透明度
+    size = 3,               # Label font size
+    color = "black",        # Label font color
+    box.padding = 0.5,      # Minimum distance between label and point
+    point.padding = 0.3,    # Extra spacing between point and label
+    segment.color = "grey", # Color of the connecting line
+    segment.size = 0.5,     # Thickness of the connecting line
+    alpha = 0.8             # Transparency of labels
   )
 
 pdf("volcano.pdf")
@@ -158,15 +155,13 @@ dev.off()
 # output files
 
 ```{r}
-#output 
-# 将行名转为第一列
 data_output <- data_plt %>%
-  rownames_to_column(var = "gene")  # 将行名转为名为"gene"的列
+  rownames_to_column(var = "gene")  # row.names to column "gene"
 
-# 读取参考文件
+# Read reference annotation
 ref <- read.xlsx('PP_v6.1_synonym_anno.xlsx')
 
-# 合并数据框,导出结果为 Excel 文件
-result <- merge(data_output,ref, by = 'gene')  # 按"gene"列合并
+# combine and output
+result <- merge(data_output,ref, by = 'gene') 
 write.xlsx(result, "Result_summary.xlsx", rowNames = FALSE)
 ```

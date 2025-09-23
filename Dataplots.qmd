@@ -65,10 +65,10 @@ gg.gap(
 ##Adjustment: axis and other
 coord_cartesian(ylim = c(0, 100))
 scale_x_continuous(breaks = c(0, 2, 4, 6, 9, 12, 24))
-scale_color_manual(values = c("red", 'black'))   #折线图等线图
-scale_fill_manual(values = c("red", 'black'))  #柱状图等填充图
+scale_color_manual(values = c("red", 'black'))
+scale_fill_manual(values = c("red", 'black'))
 
-#加上图标标题，图例，加上p value
+#Add tile and legend
 p<- p + 
   labs(title = target_gene, y = "ratio") +
   annotate("text", x = 1.5, y = max(df$value) * 1.4,
@@ -247,10 +247,9 @@ p4 +
 ## 以PIN7的荧光强度为例子
 
 ```{r}
-# ==== 设置基因名称 ====
-target_gene <- "PIN7"   # 这里改成 "PIN4" 就能复用整个脚本
+# ==== set sample name ====
+target_gene <- "PIN7"   
 
-# ==== 读取数据 ====
 file_name <- paste0(target_gene, " stele.xlsx")
 measure <- read.xlsx(file_name, sheet = 2)
 
@@ -265,7 +264,7 @@ print(t_test_res)
 pval <- signif(t_test_res$p.value, 2)
 p_label <- paste0("P = ", pval)
 
-# ==== 绘图 ====
+# ==== plot ====
 p <- ggplot(df, aes(x = sample, y = value, fill = sample)) +
   geom_violin(alpha = 1, width = 0.3, trim = FALSE) +
   geom_jitter(size = 1, shape = 16, width = 0.08, alpha = 1) +
@@ -313,18 +312,18 @@ Min_wo = function (x) min(subset(x,x > Q1(x) - 1.5*IQR(x)))
 ```{r}
 df$value <- df$value/median(df$value)
 
-# ---- 去掉 outlier 用于 t-test ----
+# ---- remove outlier for t-test ----
 df_no_out <- df %>%
   group_by(sample) %>%
   mutate(is_outlier = value < (quantile(value, 0.25) - 1.5*IQR(value)) |
            value > (quantile(value, 0.75) + 1.5*IQR(value))) %>%
   ungroup()
 
-# 只保留非 outlier 进行 t-test
+# t-test for all data
 t_test_res <- t.test(value ~ sample, data = filter(df_no_out, !is_outlier))
 print(t_test_res)
 
-# ---- 画图（包含 outlier） ----
+# ---- plot with outlier ----
 p <- ggplot(df, aes(x = sample, y = value, fill = sample)) +
   geom_boxplot(outlier.shape = NA, outlier.size = 1, alpha = 0.7,width=0.3) +
   geom_jitter(width = 0.1, size = 1, alpha = 0.9) +
@@ -339,7 +338,10 @@ print(p)
 ```{r}
 sample=read.xlsx("统计.xlsx",sheet = 1)  #read data, Macbook need add  sep=";" 
 
-#sample=c(0,1,2,3,19,20,30,40,10)
+# transform data 
+h = hist(sample,breaks = seq(from = range_from, to = range_to, by = degree))
+
+d <- as.data.frame(list(Angle = h$mids, Frequency = h$density * degree))
 
 ```
 
@@ -360,16 +362,7 @@ range_from = -180
 range_to= 180
 ```
 
-```{r}
-
-#plot circular histograph
-h = hist(sample,breaks = seq(from = range_from, to = range_to, by = degree))
-
-d <- as.data.frame(list(Angle = h$mids, Frequency = h$density * degree))
-
-```
-
-### 版本1
+## 版本1
 
 ```{r}
 #plot version #1
@@ -390,7 +383,7 @@ ggplot(d, aes(x = Angle, y = Frequency)) +
   theme(panel.grid = element_blank()) 
 ```
 
-### 版本2
+## 版本2
 
 ```{r}
 #plot version #2
@@ -543,22 +536,18 @@ df_plot=df_scaled[idx,]
 p2 <- pheatmap(df_plot,
                cluster_rows = T,
                cluster_cols = FALSE,
-               scale = "none", #已经scale过了
+               scale = "none", # already scaled
                color = colorRampPalette(c("navy", "white", "firebrick3"))(50),
-               # 在每两列之间加入间隔
                #gaps_col = c(2, 4, 6),  
                show_rownames = T,
                fontsize_col = 5
 )
 
 
-# 计算行聚类和基因顺序
+# extract cluster and gene order
 row_dist <- dist(t(scale(t(log2(expr_matrix + 1)))))
 row_clust <- hclust(row_dist, method = "complete")
 gene_order <- rownames(expr_matrix)[row_clust$order]
 expr_matrix <- expr_matrix[match(gene_order, rownames(expr_matrix)), ]
 ```
 
-```{r}
-
-```

@@ -116,7 +116,7 @@ df$group <- fct_inorder(df$group)
 my.bar.width = 0.6
 my.jitter.width = 0.05
 my.dodge.width = 0.8
-#Plot-1: Barplot(grouped) 柱状图
+#Plot-1: Barplot(grouped) 
 p1 <-
   ggplot(df, aes(x = variable, y = value, group = group, fill = variable)) +
   scale_fill_manual(values = c("#00BFC4", '#0046C4'))+
@@ -233,7 +233,7 @@ df1$sample <- fct_inorder(df1$sample)
 my.bar.width = 1.5
 my.jitter.width = 0.3
 my.dodge.width = 2
-#Plot-2: line graph 折线图
+#Plot-2: line graph
 p2 <-
   ggplot(df1, aes(x = time, y = value, group = sample, color = sample)) +
   scale_color_manual(values=c('#F8766D','#00BD57','#00BADE'))+
@@ -292,7 +292,7 @@ df$sample=as.factor(df$sample)
 df$sample <- fct_inorder(df$sample)
 
 
-#line graph 折线图
+#line graph
 p2<-ggplot(df, aes(x = distance, y = value, group = sample, color=sample) )+
   stat_summary(fun = mean, 
                geom = "line", 

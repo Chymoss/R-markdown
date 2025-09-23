@@ -24,17 +24,11 @@ library(dplyr)
 library (tidyverse)
 ```
 
-## 把样品写在list中
+## 把样品写在list中，以循环来定义输入文件和输出文件
 
 ```{r}
 samples <- c("W28", "W57", "W63", "W120", "W77", "W78")  
 ref <- read.xlsx("PP_v6.1_synonym_anno.xlsx")
-
-```
-
-## 读取 combine.exonic_variant_function文件，并做一些处理，按突变质量QUAL排序
-
-```{r}
 
 for (sample in samples) {
 
@@ -45,14 +39,13 @@ for (sample in samples) {
   data <- read.delim(input_file, header = FALSE)[, -1]
   colnames(data)[c(1,2,13)] <- c("Type", "Mutation", "QUAL")
   
-
+# Mutate to standard gene names
   df <- data %>%
     mutate(Accession = sub("\\..*$", "", Mutation)) %>%
     select(Accession, everything()) %>%
     filter(Type != "synonymous SNV") %>%
-    arrange(desc(QUAL))
+    arrange(desc(QUAL)) # sort by QUAL
   
-
   m <- left_join(df, ref, by = c("Accession" = "gene"))
   
   write.xlsx(m, output_file, rowNames = FALSE)
@@ -62,8 +55,14 @@ for (sample in samples) {
 ```
 
 # Read MASS results and merge
-
+## 找到所有的 xlsx文件 / 定义要读入的文件也可以
 ```{r}
+# find all xlsx files
+filenames=grep(".xlsx",list.files(),value=T)
+
+m1=read.xlsx(filenames[4],sheet=1)
+
+# defines files to read
 file_seq <- c(
   'MS211267-ACT-B10.xlsx',
   'MS211973-ACT1117.xlsx',
@@ -77,33 +76,29 @@ file_seq <- c(
 ## lapply读入函数，选取自己想要的列信息，同时进行筛选
 
 ```{r}
-#确认文件 Accession (x1), Unique.peptides (x2), Abundance (x3)所在的列
+# Define columns: Accession (x1), Unique.peptides (x2), Abundance (x3)
 x1 <- 4
 x2 <- 11
 x3 <- 18
 
-# 读取并处理文件
 df_list <- lapply(file_seq, function(file) {
   read.xlsx(file, sheet = 1) %>%
     select(Accession = x1, Unique.Peptides = x2, Abundance = x3) %>%
     filter(Unique.Peptides > 2) %>%
     select(-Unique.Peptides) %>%
-    mutate(Accession = sub("\\..*$", "", Accession)) %>%  #Accession规范化
-    rename(!!file := Abundance)      #动态重命名
+    mutate(Accession = sub("\\..*$", "", Accession)) %>%  
+    rename(!!file := Abundance)
 })
 
 ```
 
-## Reduce函数，log2转换
+## Reduce函数，合并，合并函数: inner_join(full_join), intersect, %in% 等等都可以使用，顺手就行；Log2转换
 
 ```{r}
-# 合并所有文件并
 df_merge <- reduce(df_list, full_join, by = "Accession") %>%
   replace(is.na(.), 0)
 
-# 合并函数: inner_join(full_join), intersect, %in% 等等都可以使用，顺手就行
-
-# 进行log2转化
+# log2 transform
 combine <- df_merge %>%
   mutate(across(-Accession, ~ log2(. + 1)))
 ```
@@ -113,6 +108,6 @@ combine <- df_merge %>%
 ```{r}
 #annotate
 ref=read.xlsx("ATH_summary_2022_SAUR_included.xlsx")
-m <- left_join(combine, ref, by = c("Accession" = "gene")) #列名不同也可以合并
+m <- left_join(combine, ref, by = c("Accession" = "gene"))
 write.xlsx(m,"LAZY4-GFP_4_Replicates_annotated.xlsx",rowNames=F)
 ```

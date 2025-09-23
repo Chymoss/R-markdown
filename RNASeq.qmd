@@ -43,7 +43,7 @@ sampleTable$mutation_b <- relevel(factor(sampleTable$mutation_b), ref = "0")
 sampleTable$Condition <- relevel(factor(sampleTable$Condition), ref = "Mock")
 sampleTable$group <- factor(sampleTable$group)
 
-# 构建设计模型，包含主效应和交互效应
+# Construct design model with main and interaction effects
 ddsHTSeq <- DESeqDataSetFromHTSeqCount(
   sampleTable = sampleTable,
   directory = directory,
@@ -56,7 +56,7 @@ ddsHTSeq <- DESeqDataSetFromHTSeqCount(
 ## Filter 低表达基因
 
 ```{r}
-# 过滤低表达基因
+# filter low expression genes
 smallestGroupSize <- nrow(sampleTable)/2
 keep <- rowSums(counts(ddsHTSeq) >= 5) > smallestGroupSize
 dds <- ddsHTSeq[keep,]
@@ -67,7 +67,7 @@ dim(dds)
 # DEseq
 
 ```{r}
-# 主分析
+# Main
 dds <- DESeq(dds)
 sizeFactors(dds)
 resultsNames(dds)
@@ -110,7 +110,7 @@ saveRDS(dds,"dds_full.rds")
 # Norm counts and export
 
 ```{r}
-# 2. 分组信息与 group 平均表达矩阵准备 ---------------------------------
+# Prepare grouping information and group average expression matrix
 dds=readRDS('dds_full.rds')
 norm_counts <- counts(dds, normalized = TRUE)
 sample_info <- as.data.frame(colData(dds))
@@ -154,7 +154,7 @@ cop_DEGs_genelist = rownames(cop_DEGs)
 # Interaction
 
 ```{r}
-# 4. mutation_a 与 mutation_b 的交互效应 Mock条件 -------------------------------
+# mutation_a and mutation_b interaction (under Mock)
 res_interaction_AB <- results(dds, name = "mutation_a1.mutation_b1")
 interaction_genes <- as.data.frame(subset(res_interaction_AB,  padj < padj_cutoff & abs(log2FoldChange) > fc_cutoff))
 interaction_genes_genelist <- rownames(interaction_genes)
@@ -190,7 +190,7 @@ dotplot(ego,
         title = "Top 20 GO Terms")
 
 
-# 查找 GO term ID 对应的描述
+# Find GO term ID of interest
 
 find_term <- c(
   'response to salicylic acid',
@@ -207,14 +207,14 @@ find_term <- c(
   'regulation of systemic acquired resistance'
 )
 
-# 存储匹配基因
+# Corresponding genes
 immune_gene_list <- list()
 
 for (term in find_term) {
   idx <- grep(term, ego@result$Description, ignore.case = TRUE)
   
   if (length(idx) > 0) {
-    go_id <- ego@result$ID[idx[1]]  # 只取第一个匹配到的 GO term ID
+    go_id <- ego@result$ID[idx[1]]  # Take only the first matched GO term ID
     cat("✅ Found:", term, "| GO ID:", go_id, "\n")
     
     genes <- ego@geneSets[[go_id]]
@@ -224,7 +224,7 @@ for (term in find_term) {
   }
 }
 
-# 合并所有基因并去重
+# combine and dedup
 gene_GO <- bind_rows(immune_gene_list) %>% distinct()
 final_genes <- intersect(ROI_genelist, gene_GO$gene)
 
@@ -243,15 +243,15 @@ genelist_2 = ROI_genelist
 
 data_plt=df_scaled[genelist_1,]
 
-# 计算全局 y 轴范围
-par(mfrow = c(1, 4), mar = c(3, 3, 2, 1))  # 边距适中
+# Set ylim
+par(mfrow = c(1, 4), mar = c(3, 3, 2, 1))
 ylim_range <- range(data_plt, na.rm = TRUE)
 
 
 light_blue <- adjustcolor("blue", alpha.f = 0.5)
 red_thin <- adjustcolor("red", alpha.f = 0.5)
 
-# 开始逐个绘图
+# plot
 for (i in seq(1, ncol(data_plt), by = 2)) {
   
   data_set <- data_plt[, c(i, i+1)]
@@ -261,20 +261,20 @@ for (i in seq(1, ncol(data_plt), by = 2)) {
           col = light_blue, 
           lty = 1,
           lwd = 1,
-          xaxt = "n",               # ❌ 取消 x 轴
+          xaxt = "n",  
           xlab = "", 
           ylab = "Expression", 
-          main = colnames(data_set)[1],   # 用第一列名作为标题（如 A0_B0_Mock）
+          main = colnames(data_set)[1],   # set column 1 to colnames
           ylim = ylim_range)
   
-  # 添加 ROI 基因（红线）
+  # Add lines of GOI expression
   matlines(t(data_set[genelist_2, ]), 
            type = "l", 
            lty = 1, 
            lwd = 0.5,
            col = red_thin)
   
-  # 添加 x 坐标 label（Mock & AVR）
+  # Add x-axis labs
   axis(side = 1, at = 1:2, labels = c("Mock", "AVR"), tick = FALSE, line = -0.5, cex.axis = 0.8)
 }
 ```
@@ -303,16 +303,16 @@ df_plot=df_scaled[idx,]
 p2 <- pheatmap(df_plot,
                cluster_rows = T,
                cluster_cols = FALSE,
-               scale = "none", #已经scale过了
+               scale = "none", # Scaled already
                color = colorRampPalette(c("navy", "white", "firebrick3"))(50),
-               # 在每两列之间加入间隔
-               #gaps_col = c(2, 4, 6),  
+               ## gaps
+               # gaps_col = c(2, 4, 6),  
                show_rownames = T,
                fontsize_col = 5
 )
 
 
-# 计算行聚类和基因顺序
+# Calculate row clustering and gene order
 row_dist <- dist(t(scale(t(log2(expr_matrix + 1)))))
 row_clust <- hclust(row_dist, method = "complete")
 gene_order <- rownames(expr_matrix)[row_clust$order]

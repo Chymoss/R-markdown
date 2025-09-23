@@ -30,6 +30,193 @@ library('reshape2')
 library('dplyr')
 ```
 
+# chisq test
+
+```{r}
+observed <- c(69, 68)    
+expected_ratio <- c(1, 1) 
+
+test_result <- chisq.test(
+  x = observed,           
+  p = expected_ratio/sum(expected_ratio)
+)
+
+print(test_result)
+
+```
+
+# t.test
+
+```{r}
+# Read data
+measure <- read.xlsx("2024.4.15-DR5-S2S3.xlsx", sheet = 2)
+df <- measure[, 3:4] %>% melt()
+df <- df[!is.na(df[,2]), ]
+colnames(df) <- c('sample', 'value')
+df$value <- df$value/median(df$value)
+
+
+# t-test（不含 outlier）
+t_test_res <- t.test(value ~ sample, data = df, var.equal=T)
+print(t_test_res)
+```
+
+# multiple test
+## types，应该用的多的是BH，最严格的直接除以test数目的是 bonferroni
+```{r}
+# Controls FWER 
+p.adjust(pValues,method="bonferroni") 
+
+# control FWER by hochberg
+p.adjust(pValues,method="hochberg")
+
+# Controls FDR 
+p.adjust(pValues,method="BH") 
+p.adjust(pValues,method="BY")
+```
+
+## expamples
+```{r}
+
+####NULL hypotheses are all true
+set.seed(1010093)
+pValues <- rep(NA,1000)
+for(i in 1:1000){
+  y <- rnorm(20)
+  x <- rnorm(20)
+  pValues[i] <- summary(lm(y ~ x))$coeff[2,4]
+}
+
+# Controls type I error
+sum(pValues < 0.05)
+
+
+# Controls FWER 
+sum(p.adjust(pValues,method="bonferroni") < 0.05)
+
+###we could do more times
+
+ben.rejct = c()
+for(j in 1:100){
+  pValues <- rep(NA,1000)
+  for(i in 1:1000){
+    y <- rnorm(20)
+    x <- rnorm(20)
+    pValues[i] <- summary(lm(y ~ x))$coeff[2,4]
+  }
+  tmp = sum(p.adjust(pValues,method="bonferroni") < 0.05)
+  ben.rejct = c(ben.rejct,tmp)
+}
+
+##control FWER by hochberg
+sum(p.adjust(pValues,method="hochberg") < 0.05)
+
+# Controls FDR 
+sum(p.adjust(pValues,method="BH") < 0.05)
+
+
+####50% of NULL hypothesis are true
+set.seed(1010093)
+pValues <- rep(NA,1000)
+for(i in 1:1000){
+  x <- rnorm(20)
+  # First 500 beta=0, last 500 beta=2
+  if(i <= 500){y <- rnorm(20)}else{ y <- rnorm(20,mean=2*x)}
+  pValues[i] <- summary(lm(y ~ x))$coeff[2,4]
+}
+trueStatus <- rep(c("zero","notZero"),each=500)
+tmp = table(pValues < 0.05, trueStatus)
+rownames(tmp) = c("retain","reject")
+tmp
+
+
+# Controls FWER 
+tmp = table(p.adjust(pValues,method="bonferroni") < 0.05,trueStatus)
+rownames(tmp) = c("retain","reject")
+tmp
+
+
+tmp = table(p.adjust(pValues,method="hommel") < 0.05,trueStatus)
+rownames(tmp) = c("retain","reject")
+tmp
+
+
+# Controls FDR 
+tmp = table(p.adjust(pValues,method="BH") < 0.05,trueStatus)
+rownames(tmp) = c("retain","reject")
+tmp
+
+# Controls FDR
+tmp = table(p.adjust(pValues,method="BY") < 0.05,trueStatus)
+rownames(tmp) = c("retain","reject")
+tmp
+
+par(mfrow=c(1,2))
+plot(pValues,p.adjust(pValues,method="bonferroni"),pch=19)
+plot(pValues,p.adjust(pValues,method="BH"),pch=19)
+
+
+
+par(mfrow=c(1,2))
+plot(pValues,p.adjust(pValues,method="BH"),pch=19)
+plot(pValues,p.adjust(pValues,method="BY"),pch=19)
+
+par(mfrow=c(1,2))
+plot(pValues,p.adjust(pValues,method="bonferroni"),pch=19)
+plot(pValues,p.adjust(pValues,method="hommel"),pch=19)
+
+
+
+p1 = p.adjust(pValues,method="bonferroni") 
+p2 = p.adjust(pValues,method="hommel")
+
+sum(p2<p1)
+```
+
+
+# leveneTest-multiple comparison
+
+```{r}
+#read and transform data
+
+filenames=grep(".xlsx",list.files(),value=T)
+
+m1=read.xlsx(filenames[4],sheet=1)
+
+m2 = melt(m1)
+
+#subtract genotype
+
+genotype=m2$variable[!duplicated(m2$variable)]
+
+n=length(genotype)
+
+pval=matrix(nrow=(n*(n-1))/2,ncol=2)
+
+#leveneTest
+k=1
+for (i in 1:(n-1)) {
+ 
+  for (j in (i+1):n){
+
+    m3 = subset(m2,(m2$variable == genotype[i] | m2$variable == genotype[j]))
+    
+    result=leveneTest(value~variable,m3)
+    
+    pval[k,1]=paste(genotype[i],"vs",genotype[j])
+    
+    pval[k,2]=result[1,3]
+    
+    k = k+1
+  }
+}
+
+#multi-comparison p value correction
+padj = p.adjust(pval[,2], method = "BH")
+qvalue=cbind(pval[,1],padj)
+
+```
+
 # bootstrap
 
 ```{r}
@@ -105,23 +292,6 @@ boot.regression.res(model.reg,data.reg,1000)
 
 ```
 
-# chisq test
-
-```{r}
-# 输入观察频数和预期比例
-observed <- c(69, 68)    # 观察到的频数
-expected_ratio <- c(1, 1) # 预期的比例（1:1）
-
-# 执行卡方拟合优度检验
-test_result <- chisq.test(
-  x = observed,           # 观察频数向量
-  p = expected_ratio/sum(expected_ratio)  # 将比例转换为概率
-)
-
-# 打印完整结果
-print(test_result)
-
-```
 
 # hclust and k-means
 
@@ -513,154 +683,6 @@ lines(hmmfit$HMM$distribution$mean[state.pred$states],col="red")
 
 ```
 
-# leveneTest-multiple comparison
-
-```{r}
-#install.packages("car")
-
-
-#read and transform data
-path="C:/Users/emmashana/Desktop"
-setwd(path)
-
-filenames=grep(".xlsx",list.files(),value=T)
-
-m1=read.xlsx(filenames[4],sheet=1)
-
-m2 = melt(m1)
-
-#subtract genotype
-
-genotype=m2$variable[!duplicated(m2$variable)]
-
-n=length(genotype)
-
-pval=matrix(nrow=(n*(n-1))/2,ncol=2)
-
-#leveneTest
-k=1
-for (i in 1:(n-1)) {
- 
-  for (j in (i+1):n){
-
-    m3 = subset(m2,(m2$variable == genotype[i] | m2$variable == genotype[j]))
-    
-    result=leveneTest(value~variable,m3)
-    
-    pval[k,1]=paste(genotype[i],"vs",genotype[j])
-    
-    pval[k,2]=result[1,3]
-    
-    k = k+1
-  }
-}
-
-#multi-comparison p value correction
-padj = p.adjust(pval[,2], method = "BH")
-qvalue=cbind(pval[,1],padj)
-
-```
-
-# multiple test
-
-```{r}
-
-####NULL hypotheses are all true
-set.seed(1010093)
-pValues <- rep(NA,1000)
-for(i in 1:1000){
-  y <- rnorm(20)
-  x <- rnorm(20)
-  pValues[i] <- summary(lm(y ~ x))$coeff[2,4]
-}
-
-# Controls type I error
-sum(pValues < 0.05)
-
-
-# Controls FWER 
-sum(p.adjust(pValues,method="bonferroni") < 0.05)
-
-
-###we could do more times
-
-ben.rejct = c()
-for(j in 1:100){
-  pValues <- rep(NA,1000)
-  for(i in 1:1000){
-    y <- rnorm(20)
-    x <- rnorm(20)
-    pValues[i] <- summary(lm(y ~ x))$coeff[2,4]
-  }
-  tmp = sum(p.adjust(pValues,method="bonferroni") < 0.05)
-  ben.rejct = c(ben.rejct,tmp)
-}
-
-##control FWER by hochberg
-sum(p.adjust(pValues,method="hochberg") < 0.05)
-
-# Controls FDR 
-sum(p.adjust(pValues,method="BH") < 0.05)
-
-
-
-####50% of NULL hypothesis are true
-set.seed(1010093)
-pValues <- rep(NA,1000)
-for(i in 1:1000){
-  x <- rnorm(20)
-  # First 500 beta=0, last 500 beta=2
-  if(i <= 500){y <- rnorm(20)}else{ y <- rnorm(20,mean=2*x)}
-  pValues[i] <- summary(lm(y ~ x))$coeff[2,4]
-}
-trueStatus <- rep(c("zero","notZero"),each=500)
-tmp = table(pValues < 0.05, trueStatus)
-rownames(tmp) = c("retain","reject")
-tmp
-
-
-# Controls FWER 
-tmp = table(p.adjust(pValues,method="bonferroni") < 0.05,trueStatus)
-rownames(tmp) = c("retain","reject")
-tmp
-
-
-tmp = table(p.adjust(pValues,method="hommel") < 0.05,trueStatus)
-rownames(tmp) = c("retain","reject")
-tmp
-
-
-# Controls FDR 
-tmp = table(p.adjust(pValues,method="BH") < 0.05,trueStatus)
-rownames(tmp) = c("retain","reject")
-tmp
-
-# Controls FDR
-tmp = table(p.adjust(pValues,method="BY") < 0.05,trueStatus)
-rownames(tmp) = c("retain","reject")
-tmp
-
-par(mfrow=c(1,2))
-plot(pValues,p.adjust(pValues,method="bonferroni"),pch=19)
-plot(pValues,p.adjust(pValues,method="BH"),pch=19)
-
-
-
-par(mfrow=c(1,2))
-plot(pValues,p.adjust(pValues,method="BH"),pch=19)
-plot(pValues,p.adjust(pValues,method="BY"),pch=19)
-
-par(mfrow=c(1,2))
-plot(pValues,p.adjust(pValues,method="bonferroni"),pch=19)
-plot(pValues,p.adjust(pValues,method="hommel"),pch=19)
-
-
-
-p1 = p.adjust(pValues,method="bonferroni") 
-p2 = p.adjust(pValues,method="hommel")
-
-sum(p2<p1)
-```
 
 # QQ plot
 
@@ -728,18 +750,4 @@ plot(baselineFitObj , col=c("red", "black","green","blue"), fun="cloglog")
 
 ```
 
-# t.test
 
-```{r}
-# Read data
-measure <- read.xlsx("2024.4.15-DR5-S2S3.xlsx", sheet = 2)
-df <- measure[, 3:4] %>% melt()
-df <- df[!is.na(df[,2]), ]
-colnames(df) <- c('sample', 'value')
-df$value <- df$value/median(df$value)
-
-
-# t-test（不含 outlier）
-t_test_res <- t.test(value ~ sample, data = df, var.equal=T)
-print(t_test_res)
-```
