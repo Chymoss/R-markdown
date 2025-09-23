@@ -23,7 +23,9 @@ library (tidyverse)
 ```
 
 # 1. Find all files
+
 不想输入文件名，直接找到所有的 xlsx文件，注意把 qmd新建在同一文件夹就不需要定义路径了
+
 ```{r}
 # find all xlsx files
 filenames=grep(".xlsx",list.files(),value=T)
@@ -32,7 +34,11 @@ m1=read.xlsx(filenames[4],sheet=1)
 ```
 
 # 2. Read multiple and merge
+
 定义要读入的文件也可以,这里展示多个文件 merge
+
+Reduce函数其实是多次调用同一函数，可以 reduce(数据 list 函数操作，函数参数)
+
 ```{r}
 # defines files to read
 file_seq <- c(
@@ -54,9 +60,10 @@ df_merge <- reduce(df_list, full_join, by = "Accession") %>%
 
 ```
 
-
 # 3. Batch read and process
+
 把样品写在list中，以循环来定义输入文件和输出文件, batch process，批量处理对多个文件执行差不多的操作但是不merge
+
 ```{r}
 samples <- c("W28", "W57", "W63", "W120", "W77", "W78")  
 
@@ -71,8 +78,8 @@ for (sample in samples) {
 }
 ```
 
+# Examples: Batch read VCF files and annotate
 
-#  Examples: Batch read VCF files and annotate
 ```{r}
 samples <- c("W28", "W57", "W63", "W120", "W77", "W78")  
 ref <- read.xlsx("PP_v6.1_synonym_anno.xlsx")
@@ -102,6 +109,7 @@ for (sample in samples) {
 ```
 
 # Examples: Read mulitple MASS results and merge
+
 ```{r}
 # find all xlsx files
 filenames=grep(".xlsx",list.files(),value=T)
