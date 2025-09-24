@@ -37,7 +37,7 @@ print(test_result)
 
 ```
 
-# t.test
+# student's t.test : t test 只能比较两组的均值，注意一定是 **两组** 和 **均值**
 
 ```{r}
 # Read data
@@ -47,7 +47,7 @@ df <- df[!is.na(df[,2]), ]
 colnames(df) <- c('sample', 'value')
 df$value <- df$value/median(df$value)
 
-# remove outlier for t-test
+# mark all outliers
 df_markOutiler <- df %>%
   group_by(sample) %>%
   mutate(is_outlier = value < (quantile(value, 0.25) - 1.5*IQR(value)) |
@@ -64,9 +64,36 @@ print(t_test_res)
 
 ```{r}
 # t-test without outlier
-t_test_res <- t.test(value ~ sample, data = filter(df_markOutiler, !is_outlier), var.equal=T)
-print(t_test_res)
+t_test_res_noOut <- t.test(value ~ sample, data = filter(df_markOutiler, !is_outlier), var.equal=T)
+print(t_test_res_noOut)
 
+```
+
+## 画图， 以 violin plot为例，标上P 值
+
+```{r}
+p <- ggplot(df, aes(x = sample, y = value, fill = sample)) +
+  geom_violin(alpha = 1, width = 0.3, trim = FALSE) +
+  geom_jitter(size = 1, shape = 16, width = 0.08, alpha = 1) +
+  stat_summary(fun = median, geom = "crossbar", color = "black",
+               linewidth = 0.5, width = 0.3) 
+
+
+pval <- signif(t_test_res$p.value, 2)
+p_label <- paste0("P = ", pval)
+
+p<- p + 
+  labs(title = "Titile", y = "Test") +
+  annotate("text", x = 1.5, y = max(df$value) * 1.4,
+           label = p_label, size = 5) +
+  theme_classic() +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5)
+  )
+
+
+print(p)
 ```
 
 # Multiple comparison 多重比较
@@ -104,7 +131,6 @@ sigLevel <- hsd$groups
 sigLevel$group <- rownames(sigLevel)
 colnames(sigLevel) <- c("mean", "levels", "group")
 ```
-
 
 箱线图（其他图都行，+ geom_text 都是一样的）
 
@@ -148,7 +174,6 @@ p <- p + geom_text(
 print(p)
 
 ```
-
 
 ## ANOVA + post hoc: Dunnett 这个是明确对照组的，使用 multcomp 包
 
