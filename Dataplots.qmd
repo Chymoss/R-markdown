@@ -79,6 +79,16 @@ p<- p +
     plot.title = element_text(hjust = 0.5)
   )
 
+
+```
+# 画图保存
+
+```{R}
+# save
+file_name <- paste0(target_gene, "-ratio.pdf")
+pdf(file_name, width = 3.25, height = 3.9)
+print(p)
+dev.off()
 ```
 
 ![](images/hextable.png)
@@ -273,7 +283,7 @@ p <- ggplot(df, aes(x = sample, y = value, fill = sample)) +
 
 
 p<- p + 
-  labs(title = target_gene, y = "ratio") +
+  labs(title = target_gene, y = "Test ratio") +
   annotate("text", x = 1.5, y = max(df$value) * 1.4,
            label = p_label, size = 5) +
   theme_classic() +
@@ -281,10 +291,6 @@ p<- p +
     legend.position = "none",
     plot.title = element_text(hjust = 0.5)
   )
-```
-
-```{r}
-print(p)
 ```
 
 ### save pdf
