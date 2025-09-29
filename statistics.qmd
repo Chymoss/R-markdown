@@ -22,7 +22,7 @@ library('ggplot2')
 library('dplyr')
 ```
 
-# chisq test
+# chisq test 卡方检验，看是否符合遗传分离比常用
 
 ```{r}
 observed <- c(69, 68)    
@@ -77,8 +77,10 @@ p <- ggplot(df, aes(x = sample, y = value, fill = sample)) +
   geom_jitter(size = 1, shape = 16, width = 0.08, alpha = 1) +
   stat_summary(fun = median, geom = "crossbar", color = "black",
                linewidth = 0.5, width = 0.3) 
+```
 
-
+标记 pval
+```{r}
 pval <- signif(t_test_res$p.value, 2)
 p_label <- paste0("P = ", pval)
 
@@ -161,7 +163,7 @@ p <- ggplot(df, aes(x = group, y = value, fill = group)) +
 print(p)
 ```
 
-加上显著性水平, 其实很简单就是有一个数据结构，也是 group, levels的结构
+加上显著性水平, 其实很简单就是有一个数据结构 sigLevel，也是 group, levels的结构，把它加到原先的p上
 
 ```{r}
 # Add significance letters 
@@ -285,7 +287,7 @@ p.adjust(pvalues,method="BY")
 
 ![](images/Snipaste_2025-09-24_19-25-50.jpg)
 
-Case: LAZY回补line，先 KS test 计算各个角度分布之间的 pvalue, 再用 bonferroni 校正
+Case: LAZY回补line，先 KS test （比较两个分布是否类似）计算各组比较的 pvalue, 再用 bonferroni 校正
 
 ```{r eval=FALSE}
 nlen=7

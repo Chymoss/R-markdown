@@ -33,8 +33,10 @@ library(tidyverse)
 df = read.xlsx('datasheet.xlsx')
 
 #process data
-df$group=as.factor(df$group)
-df$group <- fct_inorder(df$group)
+df$sample=as.factor(df$sample)
+
+# force order
+df$sample <- fct_inorder(df$sample)
 
 
 #set x-axis to factor
@@ -44,13 +46,23 @@ df$time=as.factor(df$time)
 # 画图调整选项
 
 ```{r}
-#most popular
-theme_classic()
+# theme most used
+theme_classic() +
+  theme(
+    axis.line   = element_line(color = "black"), # AI 默认时灰色文字，灰色描边
+    axis.ticks  = element_line(color = "black"),
+    axis.text   = element_text(color = "black"),
+    axis.title  = element_text(color = "black"),
+    
+    axis.title.x = element_blank(),   # 去掉横坐标标题
+    legend.position = "none", # 去掉图例
+    plot.title  = element_text(hjust = 0.5) # 标题居中
+  )
 
-# 3 in 1 combine
-theme_bw()
-theme(panel.grid = element_blank())
-theme(legend.position = "none")
+# add anotation, p_label 可以时别的自己定义的
+labs(title = "title", y = "ratio")
+annotate("text", x = 1.5, y = max(df$value) * 1.4, label = p_label, size = 5)
+
 
 #Adjustment: segment y axis
 gg.gap(
@@ -61,35 +73,20 @@ gg.gap(
   rel_heights = c(0.2, 0, 0.4)
 )
 
+# adjust axis
+coord_cartesian(ylim = c(0, 100)) # y范围
+scale_x_continuous(breaks = c(0, 2, 4, 6, 9, 12, 24)) # x轴刻度
+
+scale_y_continuous(expand = expansion(mult = c(0, 0.1)), # bar plot从0开始没有下面留白
+                    limits = c(0, 3)) # 自己设置范围，这样可以正好停留在 tick 上
 
 ##Adjustment: axis and other
-coord_cartesian(ylim = c(0, 100))
-scale_x_continuous(breaks = c(0, 2, 4, 6, 9, 12, 24))
-scale_color_manual(values = c("red", 'black'))
-scale_fill_manual(values = c("red", 'black'))
 
-#Add tile and legend
-p<- p + 
-  labs(title = target_gene, y = "ratio") +
-  annotate("text", x = 1.5, y = max(df$value) * 1.4,
-           label = p_label, size = 5) +
-  theme_classic() +
-  theme(
-    legend.position = "none",
-    plot.title = element_text(hjust = 0.5)
-  )
-
+scale_color_manual(values = c("red", 'black')) # 线的颜色
+scale_fill_manual(values = c("red", 'black')) # 填充颜色
 
 ```
-# 画图保存
 
-```{R}
-# save
-file_name <- paste0(target_gene, "-ratio.pdf")
-pdf(file_name, width = 3.25, height = 3.9)
-print(p)
-dev.off()
-```
 
 ![](images/hextable.png)
 
@@ -99,7 +96,7 @@ dev.off()
 
 # line plot grouped
 
-**所有 grouped 都是类似 x-y-t 的多维度数据，比如 “基因型-表型-时间” ，如果只是 “基因型-表型” 这种简单图，去掉 dodge选项，也不需要 fill = group / color = group**
+**所有 grouped 都是类似 x-y-t 的多维度数据，比如 “基因型-表型-时间” ，如果只是 “基因型-表型” 这种简单图，去掉 dodge选项，也不需要 fill = sample / color = sample**
 
 ```{r}
 #plot
@@ -108,8 +105,9 @@ jitter_width = 0.05
 dodge_width = 0.5
 
 p2 <-
-  ggplot(df, aes(x = time, y = value, color = group, fill = group)) +
+  ggplot(df, aes(x = time, y = value, color = sample, fill = sample)) +
 
+  # this draw line across time
   stat_summary(
     fun = mean,
     geom = "line",
@@ -118,6 +116,7 @@ p2 <-
     linewidth= 0.3
   ) +
   
+  # this draw box at each time point
   stat_summary(
     fun = mean,
     geom = "crossbar",
@@ -129,6 +128,7 @@ p2 <-
     linewidth= 0.3
   ) +
  
+  # this draw point
   geom_point(
     size =1,
     shape = 16,
@@ -150,7 +150,7 @@ p2 +
 
 ```{r}
 p2 <-
-  ggplot(df, aes(x = time, y = value, color = group, fill = group)) +
+  ggplot(df, aes(x = time, y = value, color = sample, fill = sample)) +
  
   stat_summary(
     fun = mean,
@@ -195,7 +195,7 @@ jitter_width = 0.05
 dodge_width = 0.5
 
 p1 <-
-  ggplot(df, aes(x = time, y = value,  fill = group)) +
+  ggplot(df, aes(x = time, y = value,  fill = sample)) +
   
   stat_summary(
     fun = mean,
@@ -204,6 +204,9 @@ p1 <-
     width = bar_width,
     position = position_dodge(width = dodge_width),
   ) +
+  
+  # 关键：下端不扩展（0），上端保留一点空白（5%）
+  scale_y_continuous(expand = expansion(mult = c(0, 0.05)))
   
   stat_summary(
     fun = mean,
@@ -214,11 +217,14 @@ p1 <-
     width = bar_width/2,
   )
   
+
+  
 p1 + 
   theme_classic() +
   scale_fill_manual(values=c('#F8766D','#00BD57','blue'))+
 #  scale_color_manual(values=c('black','black','black'))+
   scale_y_continuous(breaks=c(0,30,60,90,120))
+  
 ```
 
 # Boxplot grouped
@@ -230,7 +236,7 @@ jitter_width = 0.05
 dodge_width = 0.5
 line_width = 1
 
-p4 <- ggplot(df, aes(x = time, y = value, fill = group)) +
+p4 <- ggplot(df, aes(x = time, y = value, fill = sample)) +
   geom_boxplot(
     outliers = F,
     alpha = 1, 
@@ -258,13 +264,17 @@ p4 +
 
 ```{r}
 # ==== set sample name ====
-target_gene <- "PIN7"   
+sampleName <- "PIN7"   
 
-file_name <- paste0(target_gene, " stele.xlsx")
+file_name <- paste0(sampleName, ".xlsx")
 measure <- read.xlsx(file_name, sheet = 2)
 
+
+# define the column to plot
 df <- measure[, 1:2] %>% melt()
+
 df <- df[!is.na(df[,2]), ]
+
 colnames(df) <- c('sample', 'value')
 #df$value <- df$value/median(df$value)
 
@@ -276,30 +286,54 @@ p_label <- paste0("P = ", pval)
 
 # ==== plot ====
 p <- ggplot(df, aes(x = sample, y = value, fill = sample)) +
-  geom_violin(alpha = 1, width = 0.3, trim = FALSE) +
-  geom_jitter(size = 1, shape = 16, width = 0.08, alpha = 1) +
-  stat_summary(fun = median, geom = "crossbar", color = "black",
-               linewidth = 0.5, width = 0.3) 
+  geom_violin(
+    alpha = 1, 
+    width = 0.3, 
+    trim = FALSE) +
+  
+  geom_jitter(
+    size = 1, 
+    shape = 16, 
+    width = 0.08, 
+    alpha = 1) +
+  
+  stat_summary(
+    fun = median, 
+    geom = "crossbar", 
+    color = "black",
+    linewidth = 0.5, 
+    width = 0.3) 
 
 
 p<- p + 
-  labs(title = target_gene, y = "Test ratio") +
-  annotate("text", x = 1.5, y = max(df$value) * 1.4,
-           label = p_label, size = 5) +
   theme_classic() +
   theme(
-    legend.position = "none",
-    plot.title = element_text(hjust = 0.5)
-  )
+    axis.line   = element_line(color = "black"),
+    axis.ticks  = element_line(color = "black"),
+    axis.text   = element_text(color = "black"),
+    axis.title  = element_text(color = "black"),
+    
+    axis.title.x = element_blank(),   # 去掉横坐标标题
+    legend.position = "none", # 去掉图例
+    plot.title  = element_text(hjust = 0.5) # 标题居中
+  )+
+  
+  labs(title = sampleName, y = "Ratio") +
+  
+  annotate("text", 
+           x = 1.5, 
+           y = max(df$value) * 1.4,
+           label = p_label, 
+           size = 5)
 ```
 
 ### save pdf
 
 ```{r}
-file_name <- paste0(target_gene, "-ratio.pdf")
-pdf(file_name, width = 3.25, height = 3.9)
-print(p)
-dev.off()
+#file_name <- paste0(sampleName, ".pdf")
+#pdf(file_name, width = 3.25, height = 3.9)
+#print(p)
+#dev.off()
 ```
 
 ## 添加vertical line展示范围
@@ -313,7 +347,7 @@ Max_wo = function (x) max(subset(x,x < Q3(x) + 1.5*IQR(x)))
 Min_wo = function (x) min(subset(x,x > Q1(x) - 1.5*IQR(x)))
 ```
 
-## outlier 加 t.test版本
+## remove outlier, t.test 需要筛选掉 outlier，boxplot 只需要 outlier.shape = NA
 
 ```{r}
 df$value <- df$value/median(df$value)
@@ -326,8 +360,8 @@ df_no_out <- df %>%
   ungroup()
 
 # t-test for all data
-t_test_res <- t.test(value ~ sample, data = filter(df_no_out, !is_outlier))
-print(t_test_res)
+t_test_res_noOut <- t.test(value ~ sample, data = filter(df_no_out, !is_outlier))
+print(t_test_res_noOut)
 
 # ---- plot with outlier ----
 p <- ggplot(df, aes(x = sample, y = value, fill = sample)) +
@@ -556,4 +590,3 @@ row_clust <- hclust(row_dist, method = "complete")
 gene_order <- rownames(expr_matrix)[row_clust$order]
 expr_matrix <- expr_matrix[match(gene_order, rownames(expr_matrix)), ]
 ```
-

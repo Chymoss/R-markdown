@@ -36,7 +36,7 @@ colnames(merged_data) = c("CHROM", "POS", "ref_reads_mut", "alt_reads_mut","ref_
 
 输入数据格式:
 
-![](images/BSA example.jpg)
+![](images/BSA%20example.jpg)
 
 # 计算等位基因频率
 
