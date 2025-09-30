@@ -23,6 +23,9 @@ var_file = "Combine.results_var_AD.table"
 
 raw = read.delim(var_file, header = TRUE, colClasses = c("character", "numeric", "character","character"))
 
+# remove positions with no reads in either pool
+raw <- raw[!is.na(raw[[3]]) & !is.na(raw[[4]]), ]
+
 # strsplit A,B \t X,Y to A B X Y
 mut_AD = matrix(as.numeric(unlist(strsplit(raw[, 3], ","))), ncol = 2, byrow = TRUE)
 wt_AD = matrix(as.numeric(unlist(strsplit(raw[, 4], ","))), ncol = 2, byrow = TRUE)
