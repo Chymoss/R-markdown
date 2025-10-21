@@ -46,22 +46,30 @@ df$time=as.factor(df$time)
 # 画图调整选项
 
 ```{r}
-# theme most used
+# theme most used 整合了很多功能
+# AI 默认时灰色文字，灰色描边
+# 去掉横坐标标题和图例，加上图标题（居中）和y轴标题
+
 theme_classic() +
-  theme(
-    axis.line   = element_line(color = "black"), # AI 默认时灰色文字，灰色描边
-    axis.ticks  = element_line(color = "black"),
+
+theme(
+    axis.line   = element_line(color = "black",lineend = "square"), 
+    axis.ticks  = element_line(color = "black",lineend = "square"),
     axis.text   = element_text(color = "black"),
     axis.title  = element_text(color = "black"),
     
-    axis.title.x = element_blank(),   # 去掉横坐标标题
-    legend.position = "none", # 去掉图例
-    plot.title  = element_text(hjust = 0.5) # 标题居中
-  )
+    legend.position = "none", 
+    axis.title.x = element_blank(), 
+
+    plot.title  = element_text(hjust = 0.5) 
+)+
+
+labs(title = "title", y = "ratio")+
 
 # add anotation, p_label 可以时别的自己定义的
-labs(title = "title", y = "ratio")
-annotate("text", x = 1.5, y = max(df$value) * 1.4, label = p_label, size = 5)
+#labs(title = "title", y = "ratio")
+
+annotate("text", x = 1.5, y = max(df$value) * 1.4, label = p_label, size = 5)+
 
 
 #Adjustment: segment y axis
@@ -71,22 +79,21 @@ gg.gap(
   ylim = c(0, 2.25e8),
   tick_width = c(1e6, 2.5e7),
   rel_heights = c(0.2, 0, 0.4)
-)
+)+
 
 # adjust axis
-coord_cartesian(ylim = c(0, 100)) # y范围
-scale_x_continuous(breaks = c(0, 2, 4, 6, 9, 12, 24)) # x轴刻度
+coord_cartesian(ylim = c(0, 100))+ # y范围
+scale_x_continuous(breaks = c(0, 2, 4, 6, 9, 12, 24))+ # x轴刻度
 
 scale_y_continuous(expand = expansion(mult = c(0, 0.1)), # bar plot从0开始没有下面留白
-                    limits = c(0, 3)) # 自己设置范围，这样可以正好停留在 tick 上
+                    limits = c(0, 3))+ # 自己设置范围，这样可以正好停留在 tick 上
 
 ##Adjustment: axis and other
 
-scale_color_manual(values = c("red", 'black')) # 线的颜色
-scale_fill_manual(values = c("red", 'black')) # 填充颜色
+scale_color_manual(values = c("red", 'black'))+ # 线的颜色
+scale_fill_manual(values = c("red", 'black'))+ # 填充颜色
 
 ```
-
 
 ![](images/hextable.png)
 

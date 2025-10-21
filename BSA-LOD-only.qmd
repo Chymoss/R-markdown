@@ -16,6 +16,7 @@ execute:
 Bulk segregatants analysis，测序两个群体，wt pool 和 mutant pool, 每个pool混池测序，可以不是单基因决定
 
 # 读取数据，原始数据请使用 BSA.slurm生成，合并gVCF再genotype
+注意突变体，野生型与3，4列的对应关系
 
 ```{r}
 # Read allele depth file
@@ -27,8 +28,8 @@ raw = read.delim(var_file, header = TRUE, colClasses = c("character", "numeric",
 raw <- raw[!is.na(raw[[3]]) & !is.na(raw[[4]]), ]
 
 # strsplit A,B \t X,Y to A B X Y
-mut_AD = matrix(as.numeric(unlist(strsplit(raw[, 3], ","))), ncol = 2, byrow = TRUE)
-wt_AD = matrix(as.numeric(unlist(strsplit(raw[, 4], ","))), ncol = 2, byrow = TRUE)
+wt_AD = matrix(as.numeric(unlist(strsplit(raw[, 3], ","))), ncol = 2, byrow = TRUE)
+mut_AD = matrix(as.numeric(unlist(strsplit(raw[, 4], ","))), ncol = 2, byrow = TRUE)
 
 colnames(mut_AD) = colnames(wt_AD) = c("ref_reads", "alt_reads")
 TEMP = cbind(raw[, 1:2], mut_AD)
